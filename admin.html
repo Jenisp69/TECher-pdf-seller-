@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ThinkAhead Teacher Dashboard</title>
+ <link rel="stylesheet" href="admin.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <!-- PDF.js scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+
+  <div class="container">
+    
+    <div class="brand-header" style="margin-top: 10px;">
+      <img src="resources/thinkaheadlogo.jpeg" alt="ThinkAhead Logo" class="app-logo" onerror="this.style.display='none'">
+      <h1 class="app-title">Teacher Admin Portal</h1>
+      <p class="app-subtitle">Manage Student Accounts & Dynamic Courses</p>
+    </div>
+
+    <!-- Quick Add Toolbar -->
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+      <button type="button" onclick="openModal('subject-modal')" style="background: var(--bg-card); border: 1px solid var(--border); font-size: 0.85rem; height: 40px; cursor: pointer; width: 100%;">
+        ➕ Create New Subject / Stream
+      </button>
+    </div>
+
+    <!-- Card 1: Student Account Generator & Multi-Subject Cart -->
+    <div class="admin-card">
+      <h2>
+        <svg style="width:22px;height:22px;color:var(--accent);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
+        <span>1. Create Student Account</span>
+      </h2>
+      
+      <form id="account-form">
+        <div class="form-group">
+          <label>Full Name</label>
+          <input type="text" id="stu-name" required placeholder="e.g. Rohan Sharma" style="padding-left:14px;">
+        </div>
+        
+        <div class="form-group">
+          <label>WhatsApp / Phone Number</label>
+          <input type="text" id="stu-phone" required placeholder="e.g. 9801234567" style="padding-left:14px;">
+        </div>
+
+        <div class="form-group">
+          <label>Assign Username</label>
+          <input type="text" id="stu-username" required placeholder="e.g. rohan123" style="padding-left:14px;">
+        </div>
+
+        <div class="form-group">
+          <label>Assign Password</label>
+          <input type="text" id="stu-password" required placeholder="e.g. pass456" style="padding-left:14px;">
+        </div>
+
+        <!-- Dynamic Hierarchy Drill-Down Filters -->
+        <div class="form-group">
+          <label>1. Select Level / Class</label>
+          <select id="stu-class" onchange="handleClassChange('stu')">
+            <option value="">-- Select Class --</option>
+            <option value="11">Class 11</option>
+            <option value="12">Class 12</option>
+            <option value="bachelor">Bachelor Level</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>2. Select Stream / Faculty</label>
+          <select id="stu-stream" onchange="handleStreamChange('stu')" disabled>
+            <option value="">-- Select Level First --</option>
+          </select>
+        </div>
+
+        <!-- Conditional Semester Filter (Visible only for Bachelor) -->
+        <div class="form-group hidden" id="stu-semester-group">
+          <label>3. Select Semester</label>
+          <select id="stu-semester" onchange="loadAvailableSubjects('stu')">
+            <option value="">-- Select Semester --</option>
+            <option value="1st">1st Semester</option>
+            <option value="2nd">2nd Semester</option>
+            <option value="3rd">3rd Semester</option>
+            <option value="4th">4th Semester</option>
+            <option value="5th">5th Semester</option>
+            <option value="6th">6th Semester</option>
+            <option value="7th">7th Semester</option>
+            <option value="8th">8th Semester</option>
+          </select>
+        </div>
+
+        <!-- Available Subjects Picklist -->
+        <div class="form-group">
+          <label>Available Subjects</label>
+          <div id="stu-subject-picklist" class="subject-picklist">
+            <p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">
+              Select Level and Stream above to view available subjects.
+            </p>
+          </div>
+        </div>
+
+        <!-- Selected Subjects Cart / Basket -->
+        <div class="form-group">
+          <label>Assigned Subjects Basket</label>
+          <div id="stu-cart-container" class="cart-container">
+            <p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">
+              No subjects added yet. Use the ➕ buttons above to add subjects.
+            </p>
+          </div>
+        </div>
+
+        <button type="submit">Create & Enroll Student</button>
+      </form>
+      
+      <div id="account-status-display" style="margin-top: 16px; text-align: center; font-size: 0.95rem;"></div>
+    </div>
+
+    <!-- Card 2: Daily Document Uploader -->
+    <div class="admin-card">
+      <h2>
+        <svg style="width:22px;height:22px;color:var(--success);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+        <span>2. Update Daily Notes</span>
+      </h2>
+      
+      <div class="form-group">
+        <label>1. Select Level / Class</label>
+        <select id="upload-class" onchange="handleClassChange('upload')">
+          <option value="">-- Select Class --</option>
+          <option value="11">Class 11</option>
+          <option value="12">Class 12</option>
+          <option value="bachelor">Bachelor Level</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>2. Select Stream / Faculty</label>
+        <select id="upload-stream" onchange="handleStreamChange('upload')" disabled>
+          <option value="">-- Select Level First --</option>
+        </select>
+      </div>
+
+      <div class="form-group hidden" id="upload-semester-group">
+        <label>3. Select Semester</label>
+        <select id="upload-semester" onchange="loadUploadSubjects()">
+          <option value="">-- Select Semester --</option>
+          <option value="1st">1st Semester</option>
+          <option value="2nd">2nd Semester</option>
+          <option value="3rd">3rd Semester</option>
+          <option value="4th">4th Semester</option>
+          <option value="5th">5th Semester</option>
+          <option value="6th">6th Semester</option>
+          <option value="7th">7th Semester</option>
+          <option value="8th">8th Semester</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>4. Target Subject to Update</label>
+        <select id="upload-subject" disabled>
+          <option value="">-- Select Hierarchy First --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Update Mode</label>
+        <select id="update-mode">
+          <option value="append">Append Today's Page (Adds 1 Image/PDF page to end)</option>
+          <option value="replace">Replace Entire Document (Overwrites old PDF completely)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Select File (JPG, PNG, or PDF)</label>
+        <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" required style="padding: 10px; height: auto;">
+      </div>
+
+      <button id="upload-btn" onclick="handleDocumentUpdate()" style="background: var(--success);">Upload & Save Changes</button>
+      <div id="upload-status" style="margin-top: 16px; text-align: center; font-size: 0.9rem; font-weight: 500;"></div>
+    </div>
+
+    <!-- STUDENT MANAGEMENT PANEL -->
+    <div class="admin-card" id="student-management-section">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h2 style="margin: 0;">👥 Student Course & Notes Management</h2>
+      </div>
+      
+      <div class="form-group" style="margin-top: 15px;">
+        <label for="manage-student-select">Select Student</label>
+        <select id="manage-student-select" onchange="handleStudentSelectChange()">
+          <option value="">-- Loading Students... --</option>
+        </select>
+      </div>
+
+      <div id="student-details-container" class="hidden">
+        <hr style="border: 0; border-top: 1px solid var(--border); margin: 15px 0;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <h3 style="font-size: 1rem; margin: 0;">Enrolled Subjects for <span id="display-student-name" style="color: var(--primary);"></span></h3>
+          <button type="button" onclick="deleteStudentAccount()" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 600;">
+            🗑️ Delete Student Account
+          </button>
+        </div>
+        
+        <!-- Enrolled Subjects List -->
+        <div id="student-enrolled-list" class="picklist-container" style="margin-bottom: 20px;">
+          <!-- Active subjects dynamically injected here -->
+        </div>
+
+        <!-- Add New Subject to Student -->
+        <h3 style="font-size: 1rem; margin-bottom: 10px;">➕ Enroll into Additional Subject</h3>
+        
+        <div class="form-group">
+          <label>1. Select Level / Class</label>
+          <select id="add-sub-class" onchange="handleManageClassChange()">
+            <option value="">-- Select Class --</option>
+            <option value="11">Class 11</option>
+            <option value="12">Class 12</option>
+            <option value="bachelor">Bachelor Level</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>2. Select Stream / Faculty</label>
+          <select id="add-sub-stream" onchange="handleManageStreamChange()" disabled>
+            <option value="">-- Select Level First --</option>
+          </select>
+        </div>
+
+        <div class="form-group hidden" id="add-sub-sem-group">
+          <label>3. Select Semester</label>
+          <select id="add-sub-semester" onchange="loadAddableSubjects()">
+            <option value="">-- Select Semester --</option>
+            <option value="1st">1st Semester</option>
+            <option value="2nd">2nd Semester</option>
+            <option value="3rd">3rd Semester</option>
+            <option value="4th">4th Semester</option>
+            <option value="5th">5th Semester</option>
+            <option value="6th">6th Semester</option>
+            <option value="7th">7th Semester</option>
+            <option value="8th">8th Semester</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>4. Select Subject</label>
+          <select id="add-sub-subject" disabled>
+            <option value="">-- Select Hierarchy First --</option>
+          </select>
+        </div>
+
+        <button type="button" class="btn" onclick="addSubjectToSelectedStudent()" style="width: 100%;">+ Add Subject to Student</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal: Add New Subject/Stream -->
+  <div id="subject-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 15px;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; width: 100%; max-width: 450px;">
+      <h3>➕ Create New Subject or Stream</h3>
+      
+      <div class="form-group" style="margin-top: 15px;">
+        <label>Target Level / Class</label>
+        <select id="modal-class" onchange="toggleModalSemesterField()">
+          <option value="11">Class 11</option>
+          <option value="12">Class 12</option>
+          <option value="bachelor">Bachelor Level</option>
+        </select>
+      </div>
+
+      <div class="form-group hidden" id="modal-semester-group">
+        <label>Semester</label>
+        <select id="modal-semester">
+          <option value="1st">1st Semester</option>
+          <option value="2nd">2nd Semester</option>
+          <option value="3rd">3rd Semester</option>
+          <option value="4th">4th Semester</option>
+          <option value="5th">5th Semester</option>
+          <option value="6th">6th Semester</option>
+          <option value="7th">7th Semester</option>
+          <option value="8th">8th Semester</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Existing Stream OR New Stream Name</label>
+        <input type="text" id="modal-stream" placeholder="e.g. Science, Civil Engineering, Management" style="padding-left:14px;">
+      </div>
+
+      <div class="form-group">
+        <label>New Subject Name</label>
+        <input type="text" id="modal-subject-name" placeholder="e.g. Applied Mechanics, Fluid Mechanics" style="padding-left:14px;">
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button type="button" onclick="addNewSubject()" style="background: var(--success); cursor: pointer;">Save Subject</button>
+        <button type="button" onclick="closeModal('subject-modal')" style="background: var(--bg-input); cursor: pointer;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>

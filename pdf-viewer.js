@@ -1,11 +1,78 @@
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+/* ==========================================
+   GLOBAL STATE & CONSTANTS
+   ========================================== */
+const SUPABASE_URL = "https://your-supabase-url.supabase.co"; 
+const SUPABASE_ANON_KEY = "your-anon-key";
+const STORAGE_BUCKET = "notes-pdf";
 
+let supabaseClient = null;
 let currentPdfDoc = null;
 let totalPagesCount = 0;
 
+/* ==========================================
+   INITIALIZATION
+   ========================================== */
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof supabase !== 'undefined') {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  } else {
+    console.error("Supabase client library not found.");
+  }
+
+  // Configure PDF.js worker
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+  }
+
+  // Parse session token from URL parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const token = urlParams.get('token');
+
+  if (!token) {
+    showError("Invalid or missing access token.");
+    return;
+  }
+
+  verifyAndLoadSession(token);
+});
+
+/* ==========================================
+   SESSION VERIFICATION
+   ========================================== */
+async function verifyAndLoadSession(token) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('pdf_sessions')
+      .select('*')
+      .eq('token', token)
+      .single();
+
+    if (error || !data) {
+      showError("Session expired or invalid access token.");
+      return;
+    }
+
+    // Check expiration
+    if (new Date(data.expires_at) < new Date()) {
+      showError("This view link has expired.");
+      return;
+    }
+
+    // Load PDF Viewer
+    initReader(data);
+
+  } catch (err) {
+    console.error("Error verifying session:", err);
+    showError("An unexpected error occurred while loading the document.");
+  }
+}
+
+/* ==========================================
+   PDF READER ENGINE (LAZY LOADED / NO WATERMARK)
+   ========================================== */
 window.initReader = async function(sessionData) {
   const viewerContainer = document.getElementById('viewer-container');
-  viewerContainer.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px;">⏳ Loading encrypted notes...</p>';
+  viewerContainer.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px;">⏳ Loading document...</p>';
 
   const { data: publicUrlData } = supabaseClient.storage
     .from(STORAGE_BUCKET)
@@ -19,67 +86,86 @@ window.initReader = async function(sessionData) {
     document.getElementById('total-pages-label').textContent = `/ ${totalPagesCount}`;
     viewerContainer.innerHTML = '';
 
+    // Create lightweight placeholder elements for all pages so the native scrollbar scales correctly
     for (let pageNum = 1; pageNum <= totalPagesCount; pageNum++) {
-      await renderPage(pageNum, sessionData);
+      const wrapper = document.createElement('div');
+      wrapper.className = 'page-wrapper';
+      wrapper.id = `page-${pageNum}`;
+      wrapper.style.minHeight = '1100px'; // Allocate vertical space for smooth scrolling
+      wrapper.style.display = 'flex';
+      wrapper.style.justifyContent = 'center';
+      wrapper.style.alignItems = 'center';
+      wrapper.style.margin = '20px 0';
+      
+      viewerContainer.appendChild(wrapper);
     }
+
+    // Initialize IntersectionObserver to render pages only when visible in viewport
+    setupLazyLoading();
+
   } catch (err) {
-    viewerContainer.innerHTML = '<p style="color:var(--danger); text-align:center; padding:30px;">❌ Could not load notes. No document uploaded for this subject yet.</p>';
+    console.error("PDF render error:", err);
+    viewerContainer.innerHTML = '<p style="color:var(--danger); text-align:center; padding:30px;">❌ Failed to render document.</p>';
   }
 };
 
-async function renderPage(pageNum, sessionData) {
-  const page = await currentPdfDoc.getPage(pageNum);
-  const viewport = page.getViewport({ scale: 1.5 });
+/* ==========================================
+   INTERSECTION OBSERVER (VIRTUALIZATION)
+   ========================================== */
+function setupLazyLoading() {
+  const renderedPages = new Set();
 
-  const wrapper = document.createElement('div');
-  wrapper.className = 'page-wrapper';
-  wrapper.id = `page-${pageNum}`;
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const pageNum = parseInt(entry.target.id.replace('page-', ''));
+        if (!renderedPages.has(pageNum)) {
+          renderedPages.add(pageNum);
+          renderSinglePage(pageNum, entry.target);
+        }
+      }
+    });
+  }, { 
+    root: null,
+    rootMargin: '400px 0px', // Pre-render pages 400px before scrolling into view
+    threshold: 0.01 
+  });
 
-  const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
-  canvas.height = viewport.height;
-  canvas.width = viewport.width;
-
-  wrapper.appendChild(canvas);
-  document.getElementById('viewer-container').appendChild(wrapper);
-
-  await page.render({ canvasContext: context, viewport: viewport }).promise;
-  applyWatermark(context, canvas.width, canvas.height, sessionData);
+  document.querySelectorAll('.page-wrapper').forEach(wrapper => observer.observe(wrapper));
 }
 
-function applyWatermark(ctx, width, height, sessionData) {
-  ctx.save();
-  ctx.font = 'bold 20px Arial';
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.22)';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  
-  ctx.translate(width / 2, height / 2);
-  ctx.rotate(-Math.PI / 6);
+/* ==========================================
+   SINGLE PAGE RENDERER
+   ========================================== */
+async function renderSinglePage(pageNum, wrapper) {
+  try {
+    const page = await currentPdfDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1.2 }); // Reduced scale from 1.5 to 1.2 for faster load and lower RAM usage
 
-  const text = `${sessionData.studentName.toUpperCase()} (${sessionData.username}) - ${sessionData.studentPhone}`;
-  
-  for (let x = -width; x < width * 2; x += 380) {
-    for (let y = -height; y < height * 2; y += 160) {
-      ctx.fillText(text, x - (width / 2), y - (height / 2));
-    }
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    canvas.style.maxWidth = '100%';
+    canvas.style.height = 'auto';
+    canvas.style.boxShadow = '0 4px 10px rgba(0,0,0,0.15)';
+
+    wrapper.style.minHeight = 'auto'; // Remove pre-allocated minHeight once canvas renders
+    wrapper.appendChild(canvas);
+
+    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+  } catch (err) {
+    console.error(`Error rendering page ${pageNum}:`, err);
   }
-  ctx.restore();
 }
 
-document.getElementById('jump-btn').addEventListener('click', () => {
-  const pageNum = parseInt(document.getElementById('page-jump-input').value);
-  if (pageNum >= 1 && pageNum <= totalPagesCount) {
-    document.getElementById(`page-${pageNum}`).scrollIntoView({ behavior: 'smooth' });
-  } else {
-    alert(`Please enter a valid page number between 1 and ${totalPagesCount}`);
+/* ==========================================
+   UI UTILITIES
+   ========================================== */
+function showError(message) {
+  const viewerContainer = document.getElementById('viewer-container');
+  if (viewerContainer) {
+    viewerContainer.innerHTML = `<div style="color:var(--danger); text-align:center; padding:40px; font-weight:bold;">❌ ${message}</div>`;
   }
-});
-
-document.addEventListener('contextmenu', e => e.preventDefault());
-document.addEventListener('keydown', e => {
-  if ((e.ctrlKey || e.metaKey) && ['p', 's', 'u', 'c'].includes(e.key.toLowerCase())) {
-    e.preventDefault();
-    alert('Security Alert: Printing, saving, and copying are disabled.');
-  }
-});
+}

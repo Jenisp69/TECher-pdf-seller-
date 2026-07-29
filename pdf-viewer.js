@@ -24,7 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
   }
 
-  // Parse session token from URL parameter
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
 
@@ -52,13 +51,11 @@ async function verifyAndLoadSession(token) {
       return;
     }
 
-    // Check expiration
     if (new Date(data.expires_at) < new Date()) {
       showError("This view link has expired.");
       return;
     }
 
-    // Load PDF Viewer
     initReader(data);
 
   } catch (err) {
@@ -68,7 +65,7 @@ async function verifyAndLoadSession(token) {
 }
 
 /* ==========================================
-   PDF READER ENGINE (STREAMED & VIRTUALIZED)
+   PDF READER ENGINE (PAGE 1 FIRST)
    ========================================== */
 window.initReader = async function(sessionData) {
   const viewerContainer = document.getElementById('viewer-container');
@@ -79,12 +76,10 @@ window.initReader = async function(sessionData) {
     .getPublicUrl(sessionData.pdfPath);
 
   try {
-    // Configure HTTP Range Streaming (opens file without full download)
     const loadingTask = pdfjsLib.getDocument({
       url: publicUrlData.publicUrl,
-      disableAutoFetch: true,   // Prevents downloading entire file upfront
-      disableStream: false,      // Enables progressive streaming
-      rangeChunkSize: 65536 * 16 // 1MB chunk size
+      disableAutoFetch: true,
+      disableStream: false
     });
 
     currentPdfDoc = await loadingTask.promise;
@@ -93,12 +88,21 @@ window.initReader = async function(sessionData) {
     document.getElementById('total-pages-label').textContent = `/ ${totalPagesCount}`;
     viewerContainer.innerHTML = '';
 
-    // Create lightweight page placeholders so scrollbars remain accurate
-    for (let pageNum = 1; pageNum <= totalPagesCount; pageNum++) {
+    // Step 1: Render Page 1 IMMEDIATELY
+    const page1Wrapper = document.createElement('div');
+    page1Wrapper.className = 'page-wrapper';
+    page1Wrapper.id = 'page-1';
+    page1Wrapper.style.margin = '15px 0';
+    viewerContainer.appendChild(page1Wrapper);
+    
+    await renderSinglePage(1, page1Wrapper);
+
+    // Step 2: Create lightweight placeholders for pages 2 to N
+    for (let pageNum = 2; pageNum <= totalPagesCount; pageNum++) {
       const wrapper = document.createElement('div');
       wrapper.className = 'page-wrapper';
       wrapper.id = `page-${pageNum}`;
-      wrapper.style.minHeight = '900px'; 
+      wrapper.style.minHeight = '800px'; 
       wrapper.style.display = 'flex';
       wrapper.style.justifyContent = 'center';
       wrapper.style.alignItems = 'center';
@@ -107,7 +111,7 @@ window.initReader = async function(sessionData) {
       viewerContainer.appendChild(wrapper);
     }
 
-    // Lazy load pages as they enter viewport
+    // Step 3: Lazy load remaining pages on scroll
     setupLazyLoading();
 
   } catch (err) {
@@ -117,10 +121,10 @@ window.initReader = async function(sessionData) {
 };
 
 /* ==========================================
-   INTERSECTION OBSERVER (VIRTUALIZATION)
+   INTERSECTION OBSERVER
    ========================================== */
 function setupLazyLoading() {
-  const renderedPages = new Set();
+  const renderedPages = new Set([1]); // Page 1 already rendered
 
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
@@ -134,11 +138,15 @@ function setupLazyLoading() {
     });
   }, { 
     root: null,
-    rootMargin: '350px 0px', // Pre-render 350px before entering viewport
+    rootMargin: '200px 0px',
     threshold: 0.01 
   });
 
-  document.querySelectorAll('.page-wrapper').forEach(wrapper => observer.observe(wrapper));
+  document.querySelectorAll('.page-wrapper').forEach(wrapper => {
+    if (wrapper.id !== 'page-1') {
+      observer.observe(wrapper);
+    }
+  });
 }
 
 /* ==========================================
@@ -147,15 +155,14 @@ function setupLazyLoading() {
 async function renderSinglePage(pageNum, wrapper) {
   try {
     const page = await currentPdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.0 }); // Scale 1.0 for high performance & fast RAM cleanup
+    const viewport = page.getViewport({ scale: 0.9 }); // Reduced to 0.9 scale for instant canvas rasterization
 
     const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { alpha: false }); // Disable alpha channel for faster rendering
     canvas.height = viewport.height;
     canvas.width = viewport.width;
     canvas.style.maxWidth = '100%';
     canvas.style.height = 'auto';
-    canvas.style.boxShadow = '0 4px 10px rgba(0,0,0,0.15)';
 
     wrapper.style.minHeight = 'auto';
     wrapper.appendChild(canvas);
@@ -167,9 +174,6 @@ async function renderSinglePage(pageNum, wrapper) {
   }
 }
 
-/* ==========================================
-   UI UTILITIES
-   ========================================== */
 function showError(message) {
   const viewerContainer = document.getElementById('viewer-container');
   if (viewerContainer) {

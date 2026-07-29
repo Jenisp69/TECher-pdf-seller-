@@ -68,7 +68,7 @@ async function verifyAndLoadSession(token) {
 }
 
 /* ==========================================
-   PDF READER ENGINE (LAZY LOADED / NO WATERMARK)
+   PDF READER ENGINE (STREAMED & VIRTUALIZED)
    ========================================== */
 window.initReader = async function(sessionData) {
   const viewerContainer = document.getElementById('viewer-container');
@@ -79,28 +79,35 @@ window.initReader = async function(sessionData) {
     .getPublicUrl(sessionData.pdfPath);
 
   try {
-    const loadingTask = pdfjsLib.getDocument(publicUrlData.publicUrl);
+    // Configure HTTP Range Streaming (opens file without full download)
+    const loadingTask = pdfjsLib.getDocument({
+      url: publicUrlData.publicUrl,
+      disableAutoFetch: true,   // Prevents downloading entire file upfront
+      disableStream: false,      // Enables progressive streaming
+      rangeChunkSize: 65536 * 16 // 1MB chunk size
+    });
+
     currentPdfDoc = await loadingTask.promise;
     totalPagesCount = currentPdfDoc.numPages;
     
     document.getElementById('total-pages-label').textContent = `/ ${totalPagesCount}`;
     viewerContainer.innerHTML = '';
 
-    // Create lightweight placeholder elements for all pages so the native scrollbar scales correctly
+    // Create lightweight page placeholders so scrollbars remain accurate
     for (let pageNum = 1; pageNum <= totalPagesCount; pageNum++) {
       const wrapper = document.createElement('div');
       wrapper.className = 'page-wrapper';
       wrapper.id = `page-${pageNum}`;
-      wrapper.style.minHeight = '1100px'; // Allocate vertical space for smooth scrolling
+      wrapper.style.minHeight = '900px'; 
       wrapper.style.display = 'flex';
       wrapper.style.justifyContent = 'center';
       wrapper.style.alignItems = 'center';
-      wrapper.style.margin = '20px 0';
+      wrapper.style.margin = '15px 0';
       
       viewerContainer.appendChild(wrapper);
     }
 
-    // Initialize IntersectionObserver to render pages only when visible in viewport
+    // Lazy load pages as they enter viewport
     setupLazyLoading();
 
   } catch (err) {
@@ -127,7 +134,7 @@ function setupLazyLoading() {
     });
   }, { 
     root: null,
-    rootMargin: '400px 0px', // Pre-render pages 400px before scrolling into view
+    rootMargin: '350px 0px', // Pre-render 350px before entering viewport
     threshold: 0.01 
   });
 
@@ -140,7 +147,7 @@ function setupLazyLoading() {
 async function renderSinglePage(pageNum, wrapper) {
   try {
     const page = await currentPdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.2 }); // Reduced scale from 1.5 to 1.2 for faster load and lower RAM usage
+    const viewport = page.getViewport({ scale: 1.0 }); // Scale 1.0 for high performance & fast RAM cleanup
 
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -150,7 +157,7 @@ async function renderSinglePage(pageNum, wrapper) {
     canvas.style.height = 'auto';
     canvas.style.boxShadow = '0 4px 10px rgba(0,0,0,0.15)';
 
-    wrapper.style.minHeight = 'auto'; // Remove pre-allocated minHeight once canvas renders
+    wrapper.style.minHeight = 'auto';
     wrapper.appendChild(canvas);
 
     await page.render({ canvasContext: context, viewport: viewport }).promise;

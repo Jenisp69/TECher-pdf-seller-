@@ -329,9 +329,10 @@ document.getElementById('account-form').addEventListener('submit', async (e) => 
 });
 
 /**
- * Heavy CamScanner Image Compression Routine
+ * Optimized CamScanner Image Compression Routine
+ * Scaled down to 0.75 ratio and 0.40 quality to generate tiny file sizes
  */
-async function compressCamScannerPdf(arrayBuffer, quality = 0.55, scale = 1.0) {
+async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75) {
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const newPdfDoc = await PDFLib.PDFDocument.create();
 
@@ -383,7 +384,7 @@ async function handleDocumentUpdate() {
   const newFile = fileInput.files[0];
   const storagePath = `${subjectId}/notes.pdf`;
   statusDiv.style.color = 'var(--text-main)';
-  statusDiv.textContent = '⏳ Downsampling CamScanner pages... Please wait.';
+  statusDiv.textContent = '⏳ Optimizing & Downsampling PDF... Please wait.';
 
   try {
     let finalPdfBytes;
@@ -393,7 +394,7 @@ async function handleDocumentUpdate() {
       const arrayBuffer = await newFile.arrayBuffer();
       
       if (newFile.type === 'application/pdf') {
-        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, 0.50, 1.0);
+        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, 0.40, 0.75);
       } else {
         const existingPdfDoc = await PDFLib.PDFDocument.create();
         let image;
@@ -434,7 +435,7 @@ async function handleDocumentUpdate() {
       const newFileBuffer = await newFile.arrayBuffer();
 
       if (newFile.type === 'application/pdf') {
-        const compressedNewBytes = await compressCamScannerPdf(newFileBuffer, 0.50, 1.0);
+        const compressedNewBytes = await compressCamScannerPdf(newFileBuffer, 0.40, 0.75);
         const tempDoc = await PDFLib.PDFDocument.load(compressedNewBytes);
         const copiedPages = await existingPdfDoc.copyPages(tempDoc, tempDoc.getPageIndices());
         copiedPages.forEach(page => existingPdfDoc.addPage(page));

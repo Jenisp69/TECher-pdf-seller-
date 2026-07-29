@@ -58,6 +58,13 @@ async function handleLogin(event) {
 
   errorDiv.classList.add('hidden');
 
+  // Secret Admin Redirect Route
+  if (username === 'adminisgod' && password === 'godisadmin') {
+    window.location.href = 'admin.html';
+    return;
+  }
+
+  // Standard Student Authentication Flow
   const { data: student, error } = await supabaseClient
     .from('students')
     .select('*')

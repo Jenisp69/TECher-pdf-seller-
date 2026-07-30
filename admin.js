@@ -4,7 +4,6 @@ let selectedSubjectsCart = [];
 let globalStudents = [];
 let activeStudentId = null;
 
-// Configure PDF.js Worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 async function initAdmin() {
@@ -20,7 +19,6 @@ async function fetchStreamsAndSubjects() {
   globalSubjects = subjects || [];
 }
 
-// Cascading Level Change
 function handleClassChange(prefix) {
   const classVal = document.getElementById(`${prefix}-class`).value;
   const streamSelect = document.getElementById(`${prefix}-stream`);
@@ -57,7 +55,6 @@ function handleClassChange(prefix) {
   });
 }
 
-// Cascading Stream Change
 function handleStreamChange(prefix) {
   const classVal = document.getElementById(`${prefix}-class`).value;
   
@@ -70,7 +67,6 @@ function handleStreamChange(prefix) {
   }
 }
 
-// Load Picklist Items for Student Account Creation
 function loadAvailableSubjects(prefix) {
   const classVal = document.getElementById('stu-class').value;
   const streamId = document.getElementById('stu-stream').value;
@@ -263,7 +259,6 @@ async function addNewSubject() {
   }
 }
 
-// Student Form Submission
 document.getElementById('account-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   
@@ -329,9 +324,10 @@ document.getElementById('account-form').addEventListener('submit', async (e) => 
 });
 
 /**
- * Fast CamScanner Image Compression Routine with Real-Time Progress & Resource Management
+ * OPTIMIZED CamScanner Compression Routine (Scale = 1.2, Quality = 0.65)
+ * Reduces RAM consumption and limits canvas payload size to avoid crashes on 100+ page PDFs.
  */
-async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75, onProgress = null) {
+async function compressCamScannerPdf(arrayBuffer, quality = 0.65, scale = 1.2, onProgress = null) {
   const pdf = await pdfjsLib.getDocument({ 
     data: arrayBuffer,
     disableFontFace: true 
@@ -341,29 +337,31 @@ async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75, 
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
-    const viewport = page.getViewport({ scale: scale });
+    
+    const baseViewport = page.getViewport({ scale: 1.0 });
+    const renderViewport = page.getViewport({ scale: scale });
     
     const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d', { alpha: false }); // Render optimization
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
+    const context = canvas.getContext('2d', { alpha: false });
+    canvas.height = renderViewport.height;
+    canvas.width = renderViewport.width;
 
-    await page.render({ canvasContext: context, viewport: viewport }).promise;
+    await page.render({ canvasContext: context, viewport: renderViewport }).promise;
 
     const jpegDataUrl = canvas.toDataURL('image/jpeg', quality);
     const res = await fetch(jpegDataUrl);
     const jpegImageBytes = await res.arrayBuffer();
 
     const image = await newPdfDoc.embedJpg(jpegImageBytes);
-    const newPage = newPdfDoc.addPage([viewport.width, viewport.height]);
+    
+    const newPage = newPdfDoc.addPage([baseViewport.width, baseViewport.height]);
     newPage.drawImage(image, {
       x: 0,
       y: 0,
-      width: viewport.width,
-      height: viewport.height,
+      width: baseViewport.width,
+      height: baseViewport.height,
     });
 
-    // Cleanup resources to prevent tab crashes on huge PDFs (200+ pages)
     page.cleanup();
 
     if (onProgress) {
@@ -374,7 +372,6 @@ async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75, 
   return await newPdfDoc.save({ useObjectStreams: true });
 }
 
-// Daily Document Update Logic
 async function handleDocumentUpdate() {
   const subjectId = document.getElementById('upload-subject').value;
   const mode = document.getElementById('update-mode').value;
@@ -396,7 +393,6 @@ async function handleDocumentUpdate() {
   const newFile = fileInput.files[0];
   const storagePath = `${subjectId}/notes.pdf`;
   
-  // Show progress elements
   statusDiv.style.color = 'var(--text-main)';
   statusDiv.textContent = '⏳ Preparing document...';
   if (progressContainer) progressContainer.classList.remove('hidden');
@@ -416,8 +412,8 @@ async function handleDocumentUpdate() {
       const arrayBuffer = await newFile.arrayBuffer();
       
       if (newFile.type === 'application/pdf') {
-        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, 0.40, 0.75, (curr, total) => {
-          updateProgress(curr, total, 'Optimizing & Compressing');
+        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, 0.65, 1.2, (curr, total) => {
+          updateProgress(curr, total, 'Optimizing Scanned Document');
         });
       } else {
         const existingPdfDoc = await PDFLib.PDFDocument.create();
@@ -459,8 +455,8 @@ async function handleDocumentUpdate() {
       const newFileBuffer = await newFile.arrayBuffer();
 
       if (newFile.type === 'application/pdf') {
-        const compressedNewBytes = await compressCamScannerPdf(newFileBuffer, 0.40, 0.75, (curr, total) => {
-          updateProgress(curr, total, 'Compressing New Pages');
+        const compressedNewBytes = await compressCamScannerPdf(newFileBuffer, 0.65, 1.2, (curr, total) => {
+          updateProgress(curr, total, 'Compressing Appended Pages');
         });
         const tempDoc = await PDFLib.PDFDocument.load(compressedNewBytes);
         const copiedPages = await existingPdfDoc.copyPages(tempDoc, tempDoc.getPageIndices());
@@ -490,7 +486,7 @@ async function handleDocumentUpdate() {
       finalPdfBytes = await existingPdfDoc.save({ useObjectStreams: true });
     }
 
-    statusDiv.textContent = '☁️ Uploading compressed file to cloud storage...';
+    statusDiv.textContent = '☁️ Saving file to cloud storage...';
     if (progressBar) progressBar.style.width = '95%';
 
     const blob = new Blob([finalPdfBytes], { type: 'application/pdf' });
@@ -508,7 +504,7 @@ async function handleDocumentUpdate() {
 
     if (progressBar) progressBar.style.width = '100%';
     statusDiv.style.color = 'var(--success)';
-    statusDiv.textContent = `✅ Success! Compressed & uploaded. Total pages: ${finalPageCount}`;
+    statusDiv.textContent = `✅ Success! PDF optimized & saved. Total pages: ${finalPageCount}`;
     fileInput.value = '';
   } catch (error) {
     console.error(error);
@@ -521,7 +517,6 @@ async function handleDocumentUpdate() {
   }
 }
 
-// Initialize student dropdown on page load
 async function fetchStudents() {
   const { data: students, error } = await supabaseClient
     .from('students')
@@ -547,7 +542,6 @@ async function fetchStudents() {
   });
 }
 
-// Triggered when a student is selected from dropdown
 async function handleStudentSelectChange() {
   const studentId = document.getElementById('manage-student-select').value;
   const container = document.getElementById('student-details-container');
@@ -566,7 +560,6 @@ async function handleStudentSelectChange() {
   await renderStudentEnrolledCourses(studentId);
 }
 
-// Fetch & Render enrolled subjects for active student
 async function renderStudentEnrolledCourses(studentId) {
   const listContainer = document.getElementById('student-enrolled-list');
   listContainer.innerHTML = '<p style="color:var(--text-muted);">Loading enrollments...</p>';
@@ -606,7 +599,6 @@ async function renderStudentEnrolledCourses(studentId) {
   });
 }
 
-// Fixed Remove subject from student 
 async function removeSubjectFromStudent(enrollmentId, subjectId) {
   if (!confirm('Are you sure you want to remove this subject from the student?')) return;
 
@@ -624,7 +616,6 @@ async function removeSubjectFromStudent(enrollmentId, subjectId) {
   }
 }
 
-// Fixed Delete whole student account from database
 async function deleteStudentAccount() {
   if (!activeStudentId) return;
 
@@ -636,7 +627,6 @@ async function deleteStudentAccount() {
   }
 
   try {
-    // Step 1: Delete student course enrollments
     const { error: coursesErr } = await supabaseClient
       .from('student_courses')
       .delete()
@@ -644,7 +634,6 @@ async function deleteStudentAccount() {
 
     if (coursesErr) throw coursesErr;
 
-    // Step 2: Delete the student profile
     const { error: studentErr } = await supabaseClient
       .from('students')
       .delete()
@@ -654,7 +643,6 @@ async function deleteStudentAccount() {
 
     alert(`✅ ${studentName}'s account has been completely deleted.`);
 
-    // Reset view & refresh list
     document.getElementById('student-details-container').classList.add('hidden');
     activeStudentId = null;
     await fetchStudents();
@@ -665,7 +653,6 @@ async function deleteStudentAccount() {
   }
 }
 
-// Cascading UI logic for adding subject to selected student
 function handleManageClassChange() {
   const classVal = document.getElementById('add-sub-class').value;
   const streamSelect = document.getElementById('add-sub-stream');
@@ -731,7 +718,6 @@ function loadAddableSubjects() {
   subSelect.disabled = false;
 }
 
-// Save newly assigned subject to student
 async function addSubjectToSelectedStudent() {
   const subjectId = document.getElementById('add-sub-subject').value;
   if (!activeStudentId || !subjectId) {
@@ -751,16 +737,13 @@ async function addSubjectToSelectedStudent() {
   }
 }
 
-// DEFENSIVE ADMIN AUTHENTICATION GUARD
 (function enforceStrictLock() {
   const isUnlocked = sessionStorage.getItem('admin_authenticated');
   
   if (!isUnlocked) {
-    // Freeze body scrolling & interaction
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     
-    // Periodically detect if overlay was manually removed via DevTools
     const devToolsCheck = setInterval(() => {
       const overlay = document.getElementById('admin-lock-overlay');
       const authenticated = sessionStorage.getItem('admin_authenticated');
@@ -787,7 +770,6 @@ async function handleAdminLogin(event) {
 
   errorDiv.style.display = 'none';
 
-  // Secret Admin Credentials Check
   if (user === 'adminisgod' && pass === 'godisadmin') {
     sessionStorage.setItem('admin_authenticated', 'true');
     
@@ -797,7 +779,6 @@ async function handleAdminLogin(event) {
     document.documentElement.style.overflow = '';
     document.body.style.overflow = '';
 
-    // Initialize core admin functionality
     initAdmin();
   } else {
     errorDiv.textContent = 'Invalid Admin ID or Password.';

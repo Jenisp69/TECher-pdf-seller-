@@ -175,7 +175,21 @@
         <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" required style="padding: 10px; height: auto;">
       </div>
 
-      <button id="upload-btn" onclick="handleDocumentUpdate()" style="background: var(--success);">Upload & Save Changes</button>
+      <!-- Multi-Option Upload Action Buttons Layout -->
+      <div class="upload-buttons-container">
+        <div class="upload-top-row">
+          <button id="upload-btn-high" onclick="handleDocumentUpdate('high')">
+            ✨ Quality Upload (High Res)
+          </button>
+          <button id="upload-btn-std" onclick="handleDocumentUpdate('standard')">
+            📦 Standard Upload (Fast)
+          </button>
+        </div>
+        
+        <button id="upload-btn-auto" onclick="handleDocumentUpdate()">
+          ⚡ Auto Upload (&lt;150 Quality / 150+ Standard)
+        </button>
+      </div>
       
       <!-- Progress Bar & Status Display -->
       <div id="upload-status" style="margin-top: 16px; text-align: center; font-size: 0.9rem; font-weight: 500;"></div>

@@ -141,7 +141,7 @@ input:disabled {
 }
 
 /* ==========================================
-   Buttons
+   Buttons & Upload Layout
    ========================================== */
 button, .btn {
   display: inline-flex;
@@ -171,6 +171,52 @@ button:hover, .btn:hover {
 
 .btn-danger:hover {
   background: var(--danger-hover) !important;
+}
+
+/* Upload Action Buttons Grid/Flex Container */
+.upload-buttons-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.upload-top-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.upload-top-row button {
+  flex: 1;
+}
+
+#upload-btn-auto {
+  background: var(--success);
+  width: 100%;
+}
+
+#upload-btn-auto:hover {
+  background: var(--success-hover);
+}
+
+#upload-btn-high {
+  background: #2563eb;
+}
+
+#upload-btn-std {
+  background: #64748b;
+}
+
+/* Adjust text wrapping on narrow mobile screens */
+@media (max-width: 480px) {
+  .upload-top-row {
+    flex-direction: row;
+  }
+  .upload-top-row button {
+    font-size: 0.82rem;
+    padding: 0 6px;
+  }
 }
 
 /* ==========================================

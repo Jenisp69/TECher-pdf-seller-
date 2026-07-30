@@ -1,79 +1,41 @@
 /* ==========================================
-   GLOBAL STATE & CONSTANTS
+   PDF READER ENGINE (BATCH LOADING - 10 PAGES)
    ========================================== */
-const SUPABASE_URL = "https://your-supabase-url.supabase.co"; 
-const SUPABASE_ANON_KEY = "your-anon-key";
-const STORAGE_BUCKET = "notes-pdf";
-
-let supabaseClient = null;
 let currentPdfDoc = null;
 let totalPagesCount = 0;
+let currentlyLoadedPage = 0;
+const BATCH_SIZE = 10;
+let isLoadingBatch = false;
 
-/* ==========================================
-   INITIALIZATION
-   ========================================== */
-document.addEventListener('DOMContentLoaded', () => {
-  if (typeof supabase !== 'undefined') {
-    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  } else {
-    console.error("Supabase client library not found.");
-  }
+// Set PDF.js Worker globally (v3.11.174 matching HTML)
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
 
-  // Configure PDF.js worker
-  if (typeof pdfjsLib !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-  }
+window.initReader = async function(sessionData) {
+  const viewerContainer = document.getElementById('viewer-container');
+  if (!viewerContainer) return;
 
-  const urlParams = new URLSearchParams(window.location.search);
-  const token = urlParams.get('token');
+  // Reset internal state
+  currentlyLoadedPage = 0;
+  isLoadingBatch = false;
+  viewerContainer.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px;">⏳ Loading document...</p>';
 
-  if (!token) {
-    showError("Invalid or missing access token.");
+  if (!sessionData || !sessionData.pdfPath) {
+    showError("No document path provided.");
     return;
   }
 
-  verifyAndLoadSession(token);
-});
-
-/* ==========================================
-   SESSION VERIFICATION
-   ========================================== */
-async function verifyAndLoadSession(token) {
-  try {
-    const { data, error } = await supabaseClient
-      .from('pdf_sessions')
-      .select('*')
-      .eq('token', token)
-      .single();
-
-    if (error || !data) {
-      showError("Session expired or invalid access token.");
-      return;
-    }
-
-    if (new Date(data.expires_at) < new Date()) {
-      showError("This view link has expired.");
-      return;
-    }
-
-    initReader(data);
-
-  } catch (err) {
-    console.error("Error verifying session:", err);
-    showError("An unexpected error occurred while loading the document.");
-  }
-}
-
-/* ==========================================
-   PDF READER ENGINE (PAGE 1 FIRST)
-   ========================================== */
-window.initReader = async function(sessionData) {
-  const viewerContainer = document.getElementById('viewer-container');
-  viewerContainer.innerHTML = '<p style="color:var(--text-muted); text-align:center; padding:30px;">⏳ Loading document...</p>';
-
+  // Use globally configured STORAGE_BUCKET ('course-notes')
+  const bucketName = (typeof STORAGE_BUCKET !== 'undefined') ? STORAGE_BUCKET : 'course-notes';
   const { data: publicUrlData } = supabaseClient.storage
-    .from(STORAGE_BUCKET)
+    .from(bucketName)
     .getPublicUrl(sessionData.pdfPath);
+
+  if (!publicUrlData || !publicUrlData.publicUrl) {
+    showError("Failed to resolve storage URL.");
+    return;
+  }
 
   try {
     const loadingTask = pdfjsLib.getDocument({
@@ -85,86 +47,113 @@ window.initReader = async function(sessionData) {
     currentPdfDoc = await loadingTask.promise;
     totalPagesCount = currentPdfDoc.numPages;
     
-    document.getElementById('total-pages-label').textContent = `/ ${totalPagesCount}`;
+    const pageLabel = document.getElementById('total-pages-label');
+    if (pageLabel) pageLabel.textContent = `/ ${totalPagesCount}`;
+    
     viewerContainer.innerHTML = '';
 
-    // Step 1: Render Page 1 IMMEDIATELY
-    const page1Wrapper = document.createElement('div');
-    page1Wrapper.className = 'page-wrapper';
-    page1Wrapper.id = 'page-1';
-    page1Wrapper.style.margin = '15px 0';
-    viewerContainer.appendChild(page1Wrapper);
-    
-    await renderSinglePage(1, page1Wrapper);
+    // Create container for rendered page wrappers
+    const pagesList = document.createElement('div');
+    pagesList.id = 'pdf-pages-list';
+    viewerContainer.appendChild(pagesList);
 
-    // Step 2: Create lightweight placeholders for pages 2 to N
-    for (let pageNum = 2; pageNum <= totalPagesCount; pageNum++) {
-      const wrapper = document.createElement('div');
-      wrapper.className = 'page-wrapper';
-      wrapper.id = `page-${pageNum}`;
-      wrapper.style.minHeight = '800px'; 
-      wrapper.style.display = 'flex';
-      wrapper.style.justifyContent = 'center';
-      wrapper.style.alignItems = 'center';
-      wrapper.style.margin = '15px 0';
-      
-      viewerContainer.appendChild(wrapper);
-    }
+    // Create load trigger element at the bottom
+    const loadMoreContainer = document.createElement('div');
+    loadMoreContainer.id = 'load-more-container';
+    loadMoreContainer.style.textAlign = 'center';
+    loadMoreContainer.style.margin = '20px 0 40px 0';
+    viewerContainer.appendChild(loadMoreContainer);
 
-    // Step 3: Lazy load remaining pages on scroll
-    setupLazyLoading();
+    // Render initial batch of 10 pages
+    await loadNextBatch();
+
+    // Scroll listener for auto-loading next 10 pages on reach bottom
+    window.removeEventListener('scroll', handleScrollBatchLoad);
+    window.addEventListener('scroll', handleScrollBatchLoad);
 
   } catch (err) {
     console.error("PDF render error:", err);
-    viewerContainer.innerHTML = '<p style="color:var(--danger); text-align:center; padding:30px;">❌ Failed to render document.</p>';
+    showError("Failed to render document. Ensure PDF exists in 'course-notes' storage bucket.");
   }
 };
 
 /* ==========================================
-   INTERSECTION OBSERVER
+   BATCH LOAD ENGINE (10 PAGES PER CALL)
    ========================================== */
-function setupLazyLoading() {
-  const renderedPages = new Set([1]); // Page 1 already rendered
+async function loadNextBatch() {
+  if (isLoadingBatch || currentlyLoadedPage >= totalPagesCount) return;
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const pageNum = parseInt(entry.target.id.replace('page-', ''));
-        if (!renderedPages.has(pageNum)) {
-          renderedPages.add(pageNum);
-          renderSinglePage(pageNum, entry.target);
-        }
-      }
-    });
-  }, { 
-    root: null,
-    rootMargin: '200px 0px',
-    threshold: 0.01 
-  });
+  isLoadingBatch = true;
+  const pagesList = document.getElementById('pdf-pages-list');
+  const loadMoreContainer = document.getElementById('load-more-container');
 
-  document.querySelectorAll('.page-wrapper').forEach(wrapper => {
-    if (wrapper.id !== 'page-1') {
-      observer.observe(wrapper);
+  if (loadMoreContainer) {
+    loadMoreContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.9rem;">⏳ Loading next 10 pages...</p>';
+  }
+
+  const startPage = currentlyLoadedPage + 1;
+  const endPage = Math.min(currentlyLoadedPage + BATCH_SIZE, totalPagesCount);
+
+  for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'page-wrapper';
+    wrapper.id = `page-${pageNum}`;
+    wrapper.style.margin = '15px auto';
+    wrapper.style.textAlign = 'center';
+    pagesList.appendChild(wrapper);
+
+    await renderSinglePage(pageNum, wrapper);
+    currentlyLoadedPage = pageNum;
+  }
+
+  isLoadingBatch = false;
+
+  // Update UI loader status
+  if (currentlyLoadedPage < totalPagesCount) {
+    if (loadMoreContainer) {
+      loadMoreContainer.innerHTML = `
+        <button id="btn-load-more-pages" style="padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
+          Load More Pages (${currentlyLoadedPage} / ${totalPagesCount})
+        </button>
+      `;
+      document.getElementById('btn-load-more-pages')?.addEventListener('click', loadNextBatch);
     }
-  });
+  } else {
+    if (loadMoreContainer) {
+      loadMoreContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">✅ End of Document</p>';
+    }
+  }
 }
 
 /* ==========================================
-   SINGLE PAGE RENDERER
+   AUTO-SCROLL DETECTOR FOR BATCH LOADING
+   ========================================== */
+function handleScrollBatchLoad() {
+  if (currentlyLoadedPage >= totalPagesCount || isLoadingBatch) return;
+
+  const scrollPosition = window.innerHeight + window.scrollY;
+  const threshold = document.body.offsetHeight - 800;
+
+  if (scrollPosition >= threshold) {
+    loadNextBatch();
+  }
+}
+
+/* ==========================================
+   PAGE RENDERER
    ========================================== */
 async function renderSinglePage(pageNum, wrapper) {
   try {
     const page = await currentPdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 0.9 }); // Reduced to 0.9 scale for instant canvas rasterization
+    const viewport = page.getViewport({ scale: 1.0 });
 
     const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d', { alpha: false }); // Disable alpha channel for faster rendering
+    const context = canvas.getContext('2d', { alpha: false });
     canvas.height = viewport.height;
     canvas.width = viewport.width;
     canvas.style.maxWidth = '100%';
     canvas.style.height = 'auto';
 
-    wrapper.style.minHeight = 'auto';
     wrapper.appendChild(canvas);
 
     await page.render({ canvasContext: context, viewport: viewport }).promise;
@@ -180,3 +169,23 @@ function showError(message) {
     viewerContainer.innerHTML = `<div style="color:var(--danger); text-align:center; padding:40px; font-weight:bold;">❌ ${message}</div>`;
   }
 }
+
+/* ==========================================
+   PAGE JUMP CONTROL (FETCHES BATCH IF UNLOADED)
+   ========================================== */
+document.getElementById('jump-btn')?.addEventListener('click', async () => {
+  const pageInput = document.getElementById('page-jump-input');
+  const targetPage = parseInt(pageInput.value, 10);
+
+  if (targetPage >= 1 && targetPage <= totalPagesCount) {
+    // If target page isn't rendered yet, pull batches until target page is loaded
+    while (currentlyLoadedPage < targetPage) {
+      await loadNextBatch();
+    }
+    
+    const targetElem = document.getElementById(`page-${targetPage}`);
+    if (targetElem) {
+      targetElem.scrollIntoView({ behavior: 'smooth' });
+    }
+  }
+});

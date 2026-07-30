@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ThinkAhead Teacher Dashboard</title>
- <link rel="stylesheet" href="admin.css">
+  <link rel="stylesheet" href="admin.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <!-- PDF.js scripts -->
@@ -176,7 +176,12 @@
       </div>
 
       <button id="upload-btn" onclick="handleDocumentUpdate()" style="background: var(--success);">Upload & Save Changes</button>
+      
+      <!-- Progress Bar & Status Display -->
       <div id="upload-status" style="margin-top: 16px; text-align: center; font-size: 0.9rem; font-weight: 500;"></div>
+      <div id="progress-container" class="hidden" style="margin-top: 12px; background: var(--bg-input, #0f172a); border-radius: 8px; padding: 4px; border: 1px solid var(--border, #334155);">
+        <div id="progress-bar" style="width: 0%; height: 12px; background: var(--accent, #2563eb); border-radius: 6px; transition: width 0.2s ease;"></div>
+      </div>
     </div>
 
     <!-- STUDENT MANAGEMENT PANEL -->
@@ -299,6 +304,60 @@
       </div>
     </div>
   </div>
+
+
+<!-- ADMIN LOCK OVERLAY (Freezes UI until authenticated) -->
+<div id="admin-lock-overlay" style="
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background: #0f172a;
+  z-index: 9999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(12px);
+">
+  <div style="
+    background: #1e293b;
+    border: 1px solid #334155;
+    padding: 30px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 400px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+    color: #f8fafc;
+    text-align: center;
+  ">
+    <h2 style="margin-top:0; font-size:1.4rem;">🔒 Admin Verification</h2>
+    <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 20px;">
+      Enter administrative credentials to unlock control dashboard.
+    </p>
+    
+    <form id="admin-lock-form" onsubmit="handleAdminLogin(event)">
+      <div style="margin-bottom: 15px; text-align: left;">
+        <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Admin ID / Username</label>
+        <input type="text" id="admin-user-input" required autocomplete="off" style="
+          width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
+        ">
+      </div>
+      
+      <div style="margin-bottom: 20px; text-align: left;">
+        <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Password</label>
+        <input type="password" id="admin-pass-input" required style="
+          width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
+        ">
+      </div>
+
+      <div id="admin-lock-error" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 15px; display: none;"></div>
+
+      <button type="submit" style="
+        width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+      ">Unlock Dashboard</button>
+    </form>
+  </div>
+</div>
 
   <script src="config.js"></script>
   <script src="admin.js"></script>

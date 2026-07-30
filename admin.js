@@ -329,11 +329,14 @@ document.getElementById('account-form').addEventListener('submit', async (e) => 
 });
 
 /**
- * Optimized CamScanner Image Compression Routine
- * Scaled down to 0.75 ratio and 0.40 quality to generate tiny file sizes
+ * Fast CamScanner Image Compression Routine with Real-Time Progress & Resource Management
  */
-async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75) {
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75, onProgress = null) {
+  const pdf = await pdfjsLib.getDocument({ 
+    data: arrayBuffer,
+    disableFontFace: true 
+  }).promise;
+  
   const newPdfDoc = await PDFLib.PDFDocument.create();
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
@@ -341,7 +344,7 @@ async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75) 
     const viewport = page.getViewport({ scale: scale });
     
     const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
+    const context = canvas.getContext('2d', { alpha: false }); // Render optimization
     canvas.height = viewport.height;
     canvas.width = viewport.width;
 
@@ -359,6 +362,13 @@ async function compressCamScannerPdf(arrayBuffer, quality = 0.40, scale = 0.75) 
       width: viewport.width,
       height: viewport.height,
     });
+
+    // Cleanup resources to prevent tab crashes on huge PDFs (200+ pages)
+    page.cleanup();
+
+    if (onProgress) {
+      onProgress(pageNum, pdf.numPages);
+    }
   }
 
   return await newPdfDoc.save({ useObjectStreams: true });
@@ -370,6 +380,8 @@ async function handleDocumentUpdate() {
   const mode = document.getElementById('update-mode').value;
   const fileInput = document.getElementById('file-input');
   const statusDiv = document.getElementById('upload-status');
+  const progressContainer = document.getElementById('progress-container');
+  const progressBar = document.getElementById('progress-bar');
 
   if (!subjectId) {
     alert('Please select a subject first.');
@@ -383,8 +395,18 @@ async function handleDocumentUpdate() {
 
   const newFile = fileInput.files[0];
   const storagePath = `${subjectId}/notes.pdf`;
+  
+  // Show progress elements
   statusDiv.style.color = 'var(--text-main)';
-  statusDiv.textContent = '⏳ Optimizing & Downsampling PDF... Please wait.';
+  statusDiv.textContent = '⏳ Preparing document...';
+  if (progressContainer) progressContainer.classList.remove('hidden');
+  if (progressBar) progressBar.style.width = '0%';
+
+  const updateProgress = (current, total, stage = 'Compressing') => {
+    const percent = Math.round((current / total) * 100);
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    statusDiv.textContent = `⚙️ ${stage} Page ${current} / ${total} (${percent}%)`;
+  };
 
   try {
     let finalPdfBytes;
@@ -394,7 +416,9 @@ async function handleDocumentUpdate() {
       const arrayBuffer = await newFile.arrayBuffer();
       
       if (newFile.type === 'application/pdf') {
-        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, 0.40, 0.75);
+        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, 0.40, 0.75, (curr, total) => {
+          updateProgress(curr, total, 'Optimizing & Compressing');
+        });
       } else {
         const existingPdfDoc = await PDFLib.PDFDocument.create();
         let image;
@@ -435,7 +459,9 @@ async function handleDocumentUpdate() {
       const newFileBuffer = await newFile.arrayBuffer();
 
       if (newFile.type === 'application/pdf') {
-        const compressedNewBytes = await compressCamScannerPdf(newFileBuffer, 0.40, 0.75);
+        const compressedNewBytes = await compressCamScannerPdf(newFileBuffer, 0.40, 0.75, (curr, total) => {
+          updateProgress(curr, total, 'Compressing New Pages');
+        });
         const tempDoc = await PDFLib.PDFDocument.load(compressedNewBytes);
         const copiedPages = await existingPdfDoc.copyPages(tempDoc, tempDoc.getPageIndices());
         copiedPages.forEach(page => existingPdfDoc.addPage(page));
@@ -465,6 +491,8 @@ async function handleDocumentUpdate() {
     }
 
     statusDiv.textContent = '☁️ Uploading compressed file to cloud storage...';
+    if (progressBar) progressBar.style.width = '95%';
+
     const blob = new Blob([finalPdfBytes], { type: 'application/pdf' });
     
     const { error: uploadError } = await supabaseClient.storage
@@ -478,6 +506,7 @@ async function handleDocumentUpdate() {
       .update({ total_pages: finalPageCount, last_updated: new Date() })
       .eq('id', subjectId);
 
+    if (progressBar) progressBar.style.width = '100%';
     statusDiv.style.color = 'var(--success)';
     statusDiv.textContent = `✅ Success! Compressed & uploaded. Total pages: ${finalPageCount}`;
     fileInput.value = '';
@@ -485,6 +514,10 @@ async function handleDocumentUpdate() {
     console.error(error);
     statusDiv.style.color = 'var(--danger)';
     statusDiv.textContent = `❌ Error updating document: ${error.message}`;
+  } finally {
+    setTimeout(() => {
+      if (progressContainer) progressContainer.classList.add('hidden');
+    }, 4000);
   }
 }
 
@@ -715,6 +748,60 @@ async function addSubjectToSelectedStudent() {
   } else {
     await renderStudentEnrolledCourses(activeStudentId);
     alert('✅ Subject added to student successfully!');
+  }
+}
+
+// DEFENSIVE ADMIN AUTHENTICATION GUARD
+(function enforceStrictLock() {
+  const isUnlocked = sessionStorage.getItem('admin_authenticated');
+  
+  if (!isUnlocked) {
+    // Freeze body scrolling & interaction
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    
+    // Periodically detect if overlay was manually removed via DevTools
+    const devToolsCheck = setInterval(() => {
+      const overlay = document.getElementById('admin-lock-overlay');
+      const authenticated = sessionStorage.getItem('admin_authenticated');
+      
+      if (!authenticated && (!overlay || overlay.style.display === 'none')) {
+        clearInterval(devToolsCheck);
+        alert('Security violation: DevTools bypass detected.');
+        window.location.href = 'index.html';
+      }
+    }, 500);
+  } else {
+    window.addEventListener('DOMContentLoaded', () => {
+      const overlay = document.getElementById('admin-lock-overlay');
+      if (overlay) overlay.remove();
+    });
+  }
+})();
+
+async function handleAdminLogin(event) {
+  event.preventDefault();
+  const user = document.getElementById('admin-user-input').value.trim();
+  const pass = document.getElementById('admin-pass-input').value.trim();
+  const errorDiv = document.getElementById('admin-lock-error');
+
+  errorDiv.style.display = 'none';
+
+  // Secret Admin Credentials Check
+  if (user === 'adminisgod' && pass === 'godisadmin') {
+    sessionStorage.setItem('admin_authenticated', 'true');
+    
+    const overlay = document.getElementById('admin-lock-overlay');
+    if (overlay) overlay.remove();
+
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+
+    // Initialize core admin functionality
+    initAdmin();
+  } else {
+    errorDiv.textContent = 'Invalid Admin ID or Password.';
+    errorDiv.style.display = 'block';
   }
 }
 

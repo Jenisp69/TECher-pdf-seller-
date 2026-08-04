@@ -128,10 +128,10 @@
       <!-- FORM 1: STANDARD LOGIN -->
       <form id="login-form">
         <div class="form-group">
-          <label for="username-input">Username</label>
+          <label for="username-input">Username / Phone</label>
           <div class="input-wrapper">
             <i class="fa-solid fa-user input-icon"></i>
-            <input type="text" id="username-input" placeholder="Enter your username" required autocomplete="off">
+            <input type="text" id="username-input" placeholder="Enter your username or phone" required autocomplete="off">
           </div>
         </div>
         
@@ -140,6 +140,7 @@
           <div class="input-wrapper">
             <i class="fa-solid fa-lock input-icon"></i>
             <input type="password" id="password-input" placeholder="Enter your password" required>
+            <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('password-input', this)"></i>
           </div>
         </div>
         
@@ -168,24 +169,43 @@
           </div>
 
           <div class="form-group">
-            <label for="signup-phone">Phone Number (with Country Code)</label>
+            <label for="signup-phone">Phone Number</label>
             <div class="input-wrapper">
-              <input type="tel" id="signup-phone" placeholder="+9779800000000" required>
+              <input type="tel" id="signup-phone" placeholder="9845082551" required>
               <button type="button" id="send-otp-btn" class="btn-inline" onclick="sendOtpCode()">Send OTP</button>
             </div>
           </div>
 
           <div id="otp-group" class="form-group hidden">
-            <label for="otp-input">6-Digit Verification Code</label>
-            <input type="text" id="otp-input" placeholder="Enter 6-digit OTP code">
+            <label for="otp-input">6-Digit Verification Code (Optional)</label>
+            <input type="text" id="otp-input" placeholder="Enter OTP code if requested">
           </div>
 
           <div class="form-group">
             <label for="signup-password">Create Password</label>
-            <input type="password" id="signup-password" placeholder="Minimum 6 characters" required>
+            <div class="input-wrapper">
+              <input type="password" id="signup-password" placeholder="Minimum 6 characters" required>
+              <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('signup-password', this)"></i>
+            </div>
           </div>
 
-          <button type="submit" id="complete-signup-btn" disabled class="btn-primary-glass">
+          <!-- CONFIRM PASSWORD FIELD WITH COPY-PASTE BLOCKED -->
+          <div class="form-group">
+            <label for="signup-confirm-password">Confirm Password</label>
+            <div class="input-wrapper">
+              <input type="password" 
+                     id="signup-confirm-password" 
+                     placeholder="Re-enter your password" 
+                     required 
+                     oncopy="return false;" 
+                     onpaste="return false;" 
+                     oncut="return false;" 
+                     oncontextmenu="return false;">
+              <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('signup-confirm-password', this)"></i>
+            </div>
+          </div>
+
+          <button type="submit" id="complete-signup-btn" class="btn-primary-glass">
             <span>Verify & Create Account</span>
           </button>
         </form>
@@ -194,12 +214,12 @@
     </div>
   </div>
 
-  <!-- CANVAS READER SCRcEEN -->
+  <!-- CANVAS READER SCREEN -->
   <div id="reader-section" class="hidden">
     <nav class="reader-nav">
       <button id="back-to-dash-btn" class="btn-sm">
         <i class="fa-solid fa-arrow-left"></i>
-        <span>Back to Homepage,</span>
+        <span>Back to Homepage</span>
       </button>
       
       <div class="jump-controls">
@@ -211,12 +231,6 @@
 
     <div id="viewer-container" class="container"></div>
   </div>
-
-
-
-
-
-  
 
   <script src="config.js"></script>
   <script src="auth.js"></script>

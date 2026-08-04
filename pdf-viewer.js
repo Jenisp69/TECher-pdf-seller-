@@ -6,9 +6,36 @@ let totalPagesCount = 0;
 let currentlyLoadedPage = 0;
 const BATCH_SIZE = 10;
 let isLoadingBatch = false;
+let sessionGuardInterval = null;
 
 if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// Active session token verifier (Kicks concurrent logins)
+function startSessionGuard(studentId, sessionToken) {
+  if (sessionGuardInterval) clearInterval(sessionGuardInterval);
+
+  sessionGuardInterval = setInterval(async () => {
+    if (!studentId || !sessionToken || typeof supabaseClient === 'undefined') return;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('students')
+        .select('active_session_token')
+        .eq('id', studentId)
+        .single();
+
+      if (error || !data || data.active_session_token !== sessionToken) {
+        clearInterval(sessionGuardInterval);
+        alert("Your account was logged in from another device or location.");
+        sessionStorage.clear();
+        window.location.href = 'login.html';
+      }
+    } catch (e) {
+      console.warn("Session check warning:", e);
+    }
+  }, 15000); // Check every 15 seconds
 }
 
 window.initReader = async function(sessionData) {
@@ -22,6 +49,11 @@ window.initReader = async function(sessionData) {
   if (!sessionData || !sessionData.pdfPath) {
     showError("No document path provided.");
     return;
+  }
+
+  // Start single device session guard if student session is present
+  if (sessionData.studentId && sessionData.sessionToken) {
+    startSessionGuard(sessionData.studentId, sessionData.sessionToken);
   }
 
   const bucketName = (typeof STORAGE_BUCKET !== 'undefined') ? STORAGE_BUCKET : 'course-notes';

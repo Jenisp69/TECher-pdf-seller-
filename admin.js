@@ -259,6 +259,7 @@ async function addNewSubject() {
   }
 }
 
+// Updated Account Creation Event Listener with session token setup
 document.getElementById('account-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   
@@ -279,7 +280,13 @@ document.getElementById('account-form').addEventListener('submit', async (e) => 
   try {
     let { data: student, error } = await supabaseClient
       .from('students')
-      .insert([{ username, password, full_name: name, phone_number: phone }])
+      .insert([{ 
+        username, 
+        password, 
+        full_name: name, 
+        phone_number: phone,
+        active_session_token: null 
+      }])
       .select()
       .single();
 
@@ -324,7 +331,7 @@ document.getElementById('account-form').addEventListener('submit', async (e) => 
 });
 
 /**
- * OPTIMIZED CamScanner Compression Routine (Scale = 1.2, Quality = 0.65)
+ * OPTIMIZED CamScanner Compression Routine (Configurable Scale and Quality)
  * Reduces RAM consumption and limits canvas payload size to avoid crashes on 100+ page PDFs.
  */
 async function compressCamScannerPdf(arrayBuffer, quality = 0.65, scale = 1.2, onProgress = null) {
@@ -372,7 +379,7 @@ async function compressCamScannerPdf(arrayBuffer, quality = 0.65, scale = 1.2, o
   return await newPdfDoc.save({ useObjectStreams: true });
 }
 
-async function handleDocumentUpdate() {
+async function handleDocumentUpdate(qualityMode = 'auto') {
   const subjectId = document.getElementById('upload-subject').value;
   const mode = document.getElementById('update-mode').value;
   const fileInput = document.getElementById('file-input');
@@ -392,9 +399,24 @@ async function handleDocumentUpdate() {
 
   const newFile = fileInput.files[0];
   const storagePath = `${subjectId}/notes.pdf`;
-  
+
+  // --- Dynamic Quality & Scale Configurations ---
+  let targetQuality = 0.65;
+  let targetScale = 1.2;
+
+  if (qualityMode === 'high') {
+    targetQuality = 0.85;
+    targetScale = 1.8;
+  } else if (qualityMode === 'standard') {
+    targetQuality = 0.50;
+    targetScale = 1.0;
+  } else if (qualityMode === 'auto') {
+    targetQuality = 0.65;
+    targetScale = 1.2;
+  }
+
   statusDiv.style.color = 'var(--text-main)';
-  statusDiv.textContent = '⏳ Preparing document...';
+  statusDiv.textContent = `⏳ Preparing document (${qualityMode.toUpperCase()} mode)...`;
   if (progressContainer) progressContainer.classList.remove('hidden');
   if (progressBar) progressBar.style.width = '0%';
 
@@ -412,7 +434,7 @@ async function handleDocumentUpdate() {
       const arrayBuffer = await newFile.arrayBuffer();
       
       if (newFile.type === 'application/pdf') {
-        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, 0.65, 1.2, (curr, total) => {
+        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, targetQuality, targetScale, (curr, total) => {
           updateProgress(curr, total, 'Optimizing Scanned Document');
         });
       } else {
@@ -455,10 +477,10 @@ async function handleDocumentUpdate() {
       const newFileBuffer = await newFile.arrayBuffer();
 
       if (newFile.type === 'application/pdf') {
-        const compressedNewBytes = await compressCamScannerPdf(newFileBuffer, 0.65, 1.2, (curr, total) => {
+        finalPdfBytes = await compressCamScannerPdf(newFileBuffer, targetQuality, targetScale, (curr, total) => {
           updateProgress(curr, total, 'Compressing Appended Pages');
         });
-        const tempDoc = await PDFLib.PDFDocument.load(compressedNewBytes);
+        const tempDoc = await PDFLib.PDFDocument.load(finalPdfBytes);
         const copiedPages = await existingPdfDoc.copyPages(tempDoc, tempDoc.getPageIndices());
         copiedPages.forEach(page => existingPdfDoc.addPage(page));
       } 
@@ -504,7 +526,7 @@ async function handleDocumentUpdate() {
 
     if (progressBar) progressBar.style.width = '100%';
     statusDiv.style.color = 'var(--success)';
-    statusDiv.textContent = `✅ Success! PDF optimized & saved. Total pages: ${finalPageCount}`;
+    statusDiv.textContent = `✅ Success! PDF optimized & saved (${qualityMode.toUpperCase()} Mode). Total pages: ${finalPageCount}`;
     fileInput.value = '';
   } catch (error) {
     console.error(error);

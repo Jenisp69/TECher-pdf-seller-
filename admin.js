@@ -259,7 +259,6 @@ async function addNewSubject() {
   }
 }
 
-// Updated Account Creation Event Listener with session token setup
 document.getElementById('account-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   
@@ -330,10 +329,6 @@ document.getElementById('account-form').addEventListener('submit', async (e) => 
   }
 });
 
-/**
- * OPTIMIZED CamScanner Compression Routine (Configurable Scale and Quality)
- * Reduces RAM consumption and limits canvas payload size to avoid crashes on 100+ page PDFs.
- */
 async function compressCamScannerPdf(arrayBuffer, quality = 0.65, scale = 1.2, onProgress = null) {
   const pdf = await pdfjsLib.getDocument({ 
     data: arrayBuffer,
@@ -400,7 +395,6 @@ async function handleDocumentUpdate(qualityMode = 'auto') {
   const newFile = fileInput.files[0];
   const storagePath = `${subjectId}/notes.pdf`;
 
-  // --- Dynamic Quality & Scale Configurations ---
   let targetQuality = 0.65;
   let targetScale = 1.2;
 

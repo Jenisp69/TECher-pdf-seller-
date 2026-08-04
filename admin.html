@@ -74,7 +74,6 @@
           </select>
         </div>
 
-        <!-- Conditional Semester Filter (Visible only for Bachelor) -->
         <div class="form-group hidden" id="stu-semester-group">
           <label>3. Select Semester</label>
           <select id="stu-semester" onchange="loadAvailableSubjects('stu')">
@@ -90,7 +89,6 @@
           </select>
         </div>
 
-        <!-- Available Subjects Picklist -->
         <div class="form-group">
           <label>Available Subjects</label>
           <div id="stu-subject-picklist" class="subject-picklist">
@@ -100,7 +98,6 @@
           </div>
         </div>
 
-        <!-- Selected Subjects Cart / Basket -->
         <div class="form-group">
           <label>Assigned Subjects Basket</label>
           <div id="stu-cart-container" class="cart-container">
@@ -175,7 +172,6 @@
         <input type="file" id="file-input" accept=".pdf,.jpg,.jpeg,.png" required style="padding: 10px; height: auto;">
       </div>
 
-      <!-- Multi-Option Upload Action Buttons Layout -->
       <div class="upload-buttons-container">
         <div class="upload-top-row">
           <button id="upload-btn-high" onclick="handleDocumentUpdate('high')">
@@ -186,12 +182,11 @@
           </button>
         </div>
         
-        <button id="upload-btn-auto" onclick="handleDocumentUpdate()">
+        <button id="upload-btn-auto" onclick="handleDocumentUpdate('auto')">
           ⚡ Auto Upload (&lt;150 Quality / 150+ Standard)
         </button>
       </div>
       
-      <!-- Progress Bar & Status Display -->
       <div id="upload-status" style="margin-top: 16px; text-align: center; font-size: 0.9rem; font-weight: 500;"></div>
       <div id="progress-container" class="hidden" style="margin-top: 12px; background: var(--bg-input, #0f172a); border-radius: 8px; padding: 4px; border: 1px solid var(--border, #334155);">
         <div id="progress-bar" style="width: 0%; height: 12px; background: var(--accent, #2563eb); border-radius: 6px; transition: width 0.2s ease;"></div>
@@ -221,12 +216,8 @@
           </button>
         </div>
         
-        <!-- Enrolled Subjects List -->
-        <div id="student-enrolled-list" class="picklist-container" style="margin-bottom: 20px;">
-          <!-- Active subjects dynamically injected here -->
-        </div>
+        <div id="student-enrolled-list" class="picklist-container" style="margin-bottom: 20px;"></div>
 
-        <!-- Add New Subject to Student -->
         <h3 style="font-size: 1rem; margin-bottom: 10px;">➕ Enroll into Additional Subject</h3>
         
         <div class="form-group">
@@ -319,59 +310,58 @@
     </div>
   </div>
 
-
-<!-- ADMIN LOCK OVERLAY (Freezes UI until authenticated) -->
-<div id="admin-lock-overlay" style="
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  background: #0f172a;
-  z-index: 9999999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(12px);
-">
-  <div style="
-    background: #1e293b;
-    border: 1px solid #334155;
-    padding: 30px;
-    border-radius: 12px;
-    width: 90%;
-    max-width: 400px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-    color: #f8fafc;
-    text-align: center;
+  <!-- ADMIN LOCK OVERLAY -->
+  <div id="admin-lock-overlay" style="
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #0f172a;
+    z-index: 9999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(12px);
   ">
-    <h2 style="margin-top:0; font-size:1.4rem;">🔒 Admin Verification</h2>
-    <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 20px;">
-      Enter administrative credentials to unlock control dashboard.
-    </p>
-    
-    <form id="admin-lock-form" onsubmit="handleAdminLogin(event)">
-      <div style="margin-bottom: 15px; text-align: left;">
-        <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Admin ID / Username</label>
-        <input type="text" id="admin-user-input" required autocomplete="off" style="
-          width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
-        ">
-      </div>
+    <div style="
+      background: #1e293b;
+      border: 1px solid #334155;
+      padding: 30px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 400px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      color: #f8fafc;
+      text-align: center;
+    ">
+      <h2 style="margin-top:0; font-size:1.4rem;">🔒 Admin Verification</h2>
+      <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 20px;">
+        Enter administrative credentials to unlock control dashboard.
+      </p>
       
-      <div style="margin-bottom: 20px; text-align: left;">
-        <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Password</label>
-        <input type="password" id="admin-pass-input" required style="
-          width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
-        ">
-      </div>
+      <form id="admin-lock-form" onsubmit="handleAdminLogin(event)">
+        <div style="margin-bottom: 15px; text-align: left;">
+          <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Admin ID / Username</label>
+          <input type="text" id="admin-user-input" required autocomplete="off" style="
+            width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
+          ">
+        </div>
+        
+        <div style="margin-bottom: 20px; text-align: left;">
+          <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Password</label>
+          <input type="password" id="admin-pass-input" required style="
+            width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
+          ">
+        </div>
 
-      <div id="admin-lock-error" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 15px; display: none;"></div>
+        <div id="admin-lock-error" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 15px; display: none;"></div>
 
-      <button type="submit" style="
-        width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
-      ">Unlock Dashboard</button>
-    </form>
+        <button type="submit" style="
+          width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+        ">Unlock Dashboard</button>
+      </form>
+    </div>
   </div>
-</div>
 
   <script src="config.js"></script>
   <script src="admin.js"></script>

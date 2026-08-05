@@ -21,14 +21,67 @@
       <p class="app-subtitle">Manage Student Accounts & Dynamic Courses</p>
     </div>
 
-    <!-- Quick Add Toolbar -->
-    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-      <button type="button" onclick="openModal('subject-modal')" style="background: var(--bg-card); border: 1px solid var(--border); font-size: 0.85rem; height: 40px; cursor: pointer; width: 100%;">
-        ➕ Create New Subject / Stream
-      </button>
+    <!-- CARD 1: CONSOLIDATED STREAMS & SUBJECTS MANAGER -->
+    <div class="admin-card">
+      <h2>⚙️ Streams & Subjects Manager</h2>
+      
+      <!-- Level 1: Select or Add Level / Class -->
+      <div class="form-group">
+        <label>1. Select Level / Class</label>
+        <div style="display: flex; gap: 8px;">
+          <select id="mgr-class" onchange="handleClassChange('mgr')">
+            <option value="">-- Select Class --</option>
+          </select>
+          <button type="button" onclick="promptAddNewClass()" style="width: auto; padding: 0 12px; font-size: 0.8rem; background: var(--success);">➕ Add Level</button>
+          <button type="button" onclick="renameSelectedClass()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">✏️ Rename</button>
+          <button type="button" class="btn-danger" onclick="deleteSelectedClass()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">🗑️ Delete</button>
+        </div>
+      </div>
+
+      <!-- Level 2: Select or Add Stream / Faculty -->
+      <div class="form-group">
+        <label>2. Select Stream / Faculty</label>
+        <div style="display: flex; gap: 8px;">
+          <select id="mgr-stream" onchange="handleStreamChange('mgr')" disabled>
+            <option value="">-- Select Level First --</option>
+          </select>
+          <button type="button" id="mgr-add-stream-btn" onclick="promptAddNewStream()" disabled style="width: auto; padding: 0 12px; font-size: 0.8rem; background: var(--success);">➕ Add Stream</button>
+          <button type="button" onclick="renameSelectedStream()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">✏️ Rename</button>
+          <button type="button" class="btn-danger" onclick="deleteSelectedStream()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">🗑️ Delete</button>
+        </div>
+      </div>
+
+      <!-- Level 3: Select Semester (Conditional) -->
+      <div class="form-group hidden" id="mgr-semester-group">
+        <label>3. Select Semester</label>
+        <select id="mgr-semester" onchange="loadManagerSubjects()">
+          <option value="">-- Select Semester --</option>
+          <option value="1st">1st Semester</option>
+          <option value="2nd">2nd Semester</option>
+          <option value="3rd">3rd Semester</option>
+          <option value="4th">4th Semester</option>
+          <option value="5th">5th Semester</option>
+          <option value="6th">6th Semester</option>
+          <option value="7th">7th Semester</option>
+          <option value="8th">8th Semester</option>
+        </select>
+      </div>
+
+      <!-- Level 4: Manage & Add Subjects -->
+      <div class="form-group">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <label style="margin-bottom: 0;">4. Manage Subjects in Selection</label>
+          <button type="button" id="mgr-add-subject-btn" onclick="promptAddNewSubject()" disabled style="width: auto; height: 32px; padding: 0 12px; font-size: 0.8rem; background: var(--success);">➕ Add Subject</button>
+        </div>
+        <div id="mgr-subject-list" class="picklist-container">
+          <p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">
+            Select hierarchy above to list and manage subjects.
+          </p>
+        </div>
+      </div>
     </div>
 
-    <!-- Card 1: Student Account Generator & Multi-Subject Cart -->
+    <!-- CARD 2 (Student Account Generator) -->
     <div class="admin-card">
       <h2>
         <svg style="width:22px;height:22px;color:var(--accent);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
@@ -56,14 +109,11 @@
           <input type="text" id="stu-password" required placeholder="e.g. pass456" style="padding-left:14px;">
         </div>
 
-        <!-- Dynamic Hierarchy Drill-Down Filters -->
+        <!-- Dynamic Hierarchy Filters -->
         <div class="form-group">
           <label>1. Select Level / Class</label>
           <select id="stu-class" onchange="handleClassChange('stu')">
             <option value="">-- Select Class --</option>
-            <option value="11">Class 11</option>
-            <option value="12">Class 12</option>
-            <option value="bachelor">Bachelor Level</option>
           </select>
         </div>
 
@@ -113,7 +163,7 @@
       <div id="account-status-display" style="margin-top: 16px; text-align: center; font-size: 0.95rem;"></div>
     </div>
 
-    <!-- Card 2: Daily Document Uploader -->
+    <!-- CARD 3: Daily Document Uploader -->
     <div class="admin-card">
       <h2>
         <svg style="width:22px;height:22px;color:var(--success);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
@@ -124,9 +174,6 @@
         <label>1. Select Level / Class</label>
         <select id="upload-class" onchange="handleClassChange('upload')">
           <option value="">-- Select Class --</option>
-          <option value="11">Class 11</option>
-          <option value="12">Class 12</option>
-          <option value="bachelor">Bachelor Level</option>
         </select>
       </div>
 
@@ -193,7 +240,7 @@
       </div>
     </div>
 
-    <!-- STUDENT MANAGEMENT PANEL -->
+    <!-- CARD 4: STUDENT MANAGEMENT PANEL -->
     <div class="admin-card" id="student-management-section">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <h2 style="margin: 0;">👥 Student Course & Notes Management</h2>
@@ -224,9 +271,6 @@
           <label>1. Select Level / Class</label>
           <select id="add-sub-class" onchange="handleManageClassChange()">
             <option value="">-- Select Class --</option>
-            <option value="11">Class 11</option>
-            <option value="12">Class 12</option>
-            <option value="bachelor">Bachelor Level</option>
           </select>
         </div>
 
@@ -265,74 +309,12 @@
 
   </div>
 
-  <!-- Modal: Add New Subject/Stream -->
-  <div id="subject-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 9999; padding: 15px;">
-    <div style="background: var(--bg-card); border: 1px solid var(--border); padding: 20px; border-radius: 12px; width: 100%; max-width: 450px;">
-      <h3>➕ Create New Subject or Stream</h3>
-      
-      <div class="form-group" style="margin-top: 15px;">
-        <label>Target Level / Class</label>
-        <select id="modal-class" onchange="toggleModalSemesterField()">
-          <option value="11">Class 11</option>
-          <option value="12">Class 12</option>
-          <option value="bachelor">Bachelor Level</option>
-        </select>
-      </div>
-
-      <div class="form-group hidden" id="modal-semester-group">
-        <label>Semester</label>
-        <select id="modal-semester">
-          <option value="1st">1st Semester</option>
-          <option value="2nd">2nd Semester</option>
-          <option value="3rd">3rd Semester</option>
-          <option value="4th">4th Semester</option>
-          <option value="5th">5th Semester</option>
-          <option value="6th">6th Semester</option>
-          <option value="7th">7th Semester</option>
-          <option value="8th">8th Semester</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Existing Stream OR New Stream Name</label>
-        <input type="text" id="modal-stream" placeholder="e.g. Science, Civil Engineering, Management" style="padding-left:14px;">
-      </div>
-
-      <div class="form-group">
-        <label>New Subject Name</label>
-        <input type="text" id="modal-subject-name" placeholder="e.g. Applied Mechanics, Fluid Mechanics" style="padding-left:14px;">
-      </div>
-
-      <div style="display: flex; gap: 10px; margin-top: 20px;">
-        <button type="button" onclick="addNewSubject()" style="background: var(--success); cursor: pointer;">Save Subject</button>
-        <button type="button" onclick="closeModal('subject-modal')" style="background: var(--bg-input); cursor: pointer;">Cancel</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ADMIN LOCK OVERLAY -->
   <div id="admin-lock-overlay" style="
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100vh;
-    background: #0f172a;
-    z-index: 9999999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(12px);
+    position: fixed; inset: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 9999999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(12px);
   ">
     <div style="
-      background: #1e293b;
-      border: 1px solid #334155;
-      padding: 30px;
-      border-radius: 12px;
-      width: 90%;
-      max-width: 400px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-      color: #f8fafc;
-      text-align: center;
+      background: #1e293b; border: 1px solid #334155; padding: 30px; border-radius: 12px; width: 90%; max-width: 400px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5); color: #f8fafc; text-align: center;
     ">
       <h2 style="margin-top:0; font-size:1.4rem;">🔒 Admin Verification</h2>
       <p style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 20px;">

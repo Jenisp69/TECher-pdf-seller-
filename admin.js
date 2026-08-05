@@ -1,3 +1,8 @@
+let globalClasses = [
+  { id: '11', name: 'Class 11' },
+  { id: '12', name: 'Class 12' },
+  { id: 'bachelor', name: 'Bachelor Level' }
+];
 let globalSubjects = [];
 let globalStreams = [];
 let selectedSubjectsCart = [];
@@ -9,7 +14,33 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 async function initAdmin() {
   await fetchStreamsAndSubjects();
   await fetchStudents();
+  populateClassDropdowns();
 }
+
+function populateClassDropdowns() {
+  const dropdownIds = ['mgr-class', 'stu-class', 'upload-class', 'add-sub-class'];
+
+  dropdownIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    const currentVal = el.value;
+    el.innerHTML = '<option value="">-- Select Class --</option>';
+
+    globalClasses.forEach(cls => {
+      const opt = document.createElement('option');
+      opt.value = cls.id;
+      opt.textContent = cls.name;
+      el.appendChild(opt);
+    });
+
+    if (currentVal) el.value = currentVal;
+  });
+}
+
+/* ==========================================
+   Hierarchy & Dynamic Streams/Classes Manager
+   ========================================== */
 
 async function fetchStreamsAndSubjects() {
   const { data: streams } = await supabaseClient.from('streams').select('*');
@@ -27,7 +58,14 @@ function handleClassChange(prefix) {
   streamSelect.innerHTML = '<option value="">-- Select Stream --</option>';
   streamSelect.disabled = !classVal;
 
-  if (prefix === 'stu') {
+  if (prefix === 'mgr') {
+    const addStreamBtn = document.getElementById('mgr-add-stream-btn');
+    const addSubjectBtn = document.getElementById('mgr-add-subject-btn');
+    if (addStreamBtn) addStreamBtn.disabled = !classVal;
+    if (addSubjectBtn) addSubjectBtn.disabled = true;
+    document.getElementById('mgr-subject-list').innerHTML = 
+      '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">Select hierarchy above to list and manage subjects.</p>';
+  } else if (prefix === 'stu') {
     document.getElementById('stu-subject-picklist').innerHTML = 
       '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">Select Level and Stream above to view available subjects.</p>';
   } else if (prefix === 'upload') {
@@ -37,9 +75,9 @@ function handleClassChange(prefix) {
   }
 
   if (classVal === 'bachelor') {
-    semesterGroup.classList.remove('hidden');
+    if (semesterGroup) semesterGroup.classList.remove('hidden');
   } else {
-    semesterGroup.classList.add('hidden');
+    if (semesterGroup) semesterGroup.classList.add('hidden');
     const semSelect = document.getElementById(`${prefix}-semester`);
     if (semSelect) semSelect.value = '';
   }
@@ -57,13 +95,253 @@ function handleClassChange(prefix) {
 
 function handleStreamChange(prefix) {
   const classVal = document.getElementById(`${prefix}-class`).value;
-  
-  if (prefix === 'stu') {
+  const streamId = document.getElementById(`${prefix}-stream`).value;
+
+  if (prefix === 'mgr') {
+    const addSubjectBtn = document.getElementById('mgr-add-subject-btn');
+    if (addSubjectBtn) addSubjectBtn.disabled = !streamId;
+    if (classVal !== 'bachelor') {
+      loadManagerSubjects();
+    }
+  } else if (prefix === 'stu') {
     loadAvailableSubjects('stu');
   } else if (prefix === 'upload') {
     if (classVal !== 'bachelor') {
       loadUploadSubjects();
     }
+  }
+}
+
+/* Dynamic Add, Rename & Delete Handlers for Hierarchy */
+function promptAddNewClass() {
+  const name = prompt("Enter New Level / Class Name (e.g. Master Level, Diploma):");
+  if (!name || !name.trim()) return;
+
+  const cleanName = name.trim();
+  const val = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+  if (globalClasses.some(c => c.id === val)) {
+    return alert('Level already exists.');
+  }
+
+  globalClasses.push({ id: val, name: cleanName });
+  populateClassDropdowns();
+
+  document.getElementById('mgr-class').value = val;
+  handleClassChange('mgr');
+}
+
+function renameSelectedClass() {
+  const classVal = document.getElementById('mgr-class').value;
+  if (!classVal) return alert('Please select a Class / Level to rename.');
+
+  const clsObj = globalClasses.find(c => c.id === classVal);
+  const newName = prompt('Enter new Level / Class Name:', clsObj ? clsObj.name : '');
+
+  if (newName && newName.trim()) {
+    clsObj.name = newName.trim();
+    populateClassDropdowns();
+    document.getElementById('mgr-class').value = classVal;
+  }
+}
+
+function deleteSelectedClass() {
+  const classVal = document.getElementById('mgr-class').value;
+  if (!classVal) return alert('Please select a Class / Level to delete.');
+
+  if (!confirm('🚨 Are you sure? Removing this Level will clear associated selections.')) return;
+
+  globalClasses = globalClasses.filter(c => c.id !== classVal);
+  populateClassDropdowns();
+  handleClassChange('mgr');
+}
+
+async function promptAddNewStream() {
+  const classVal = document.getElementById('mgr-class').value;
+  if (!classVal) return alert('Please select a Level / Class first.');
+
+  const streamName = prompt('Enter New Stream / Faculty Name:');
+  if (!streamName || !streamName.trim()) return;
+
+  const cleanStreamName = streamName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const streamId = `${classVal}-${cleanStreamName}`;
+
+  try {
+    const { error } = await supabaseClient
+      .from('streams')
+      .upsert([{ id: streamId, class_level: classVal, stream_name: streamName.trim() }]);
+
+    if (error) throw error;
+
+    alert(`✅ Stream "${streamName}" added successfully!`);
+    await fetchStreamsAndSubjects();
+    handleClassChange('mgr');
+    document.getElementById('mgr-stream').value = streamId;
+    handleStreamChange('mgr');
+
+  } catch (err) {
+    alert(`Error adding stream: ${err.message}`);
+  }
+}
+
+async function promptAddNewSubject() {
+  const classVal = document.getElementById('mgr-class').value;
+  const streamId = document.getElementById('mgr-stream').value;
+  const semVal = document.getElementById('mgr-semester').value;
+
+  if (!classVal || !streamId) {
+    return alert('Please select Class and Stream first.');
+  }
+
+  if (classVal === 'bachelor' && !semVal) {
+    return alert('Please select a Semester for Bachelor level.');
+  }
+
+  const subjectName = prompt('Enter New Subject Name:');
+  if (!subjectName || !subjectName.trim()) return;
+
+  const cleanSubjectName = subjectName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const rawSubjectId = classVal === 'bachelor'
+    ? `${streamId}-${semVal}-${cleanSubjectName}`
+    : `${streamId}-${cleanSubjectName}`;
+
+  try {
+    const { error } = await supabaseClient
+      .from('subjects')
+      .insert([{
+        id: rawSubjectId,
+        subject_name: subjectName.trim(),
+        pdf_storage_path: `${rawSubjectId}/notes.pdf`,
+        class_level: classVal,
+        stream_id: streamId,
+        semester: classVal === 'bachelor' ? semVal : null
+      }]);
+
+    if (error) throw error;
+
+    alert(`✅ Subject "${subjectName}" created!`);
+    await fetchStreamsAndSubjects();
+    loadManagerSubjects();
+
+  } catch (err) {
+    alert(`Error adding subject: ${err.message}`);
+  }
+}
+
+function loadManagerSubjects() {
+  const classVal = document.getElementById('mgr-class').value;
+  const streamId = document.getElementById('mgr-stream').value;
+  const semVal = document.getElementById('mgr-semester').value;
+  const listContainer = document.getElementById('mgr-subject-list');
+
+  listContainer.innerHTML = '';
+
+  if (!classVal || !streamId || (classVal === 'bachelor' && !semVal)) {
+    listContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">Complete level, stream, and semester selections above.</p>';
+    return;
+  }
+
+  const filtered = globalSubjects.filter(sub => {
+    const matchClass = sub.class_level === classVal;
+    const matchStream = sub.stream_id === streamId;
+    const matchSem = classVal === 'bachelor' ? sub.semester === semVal : true;
+    return matchClass && matchStream && matchSem;
+  });
+
+  if (filtered.length === 0) {
+    listContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">No subjects found under this selection. Click ➕ Add Subject above to create one.</p>';
+    return;
+  }
+
+  filtered.forEach(sub => {
+    const item = document.createElement('div');
+    item.className = 'picklist-item';
+    item.innerHTML = `
+      <div class="picklist-title">
+        <b>${sub.subject_name}</b>
+        <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'All'}</span>
+      </div>
+      <div style="display:flex; gap:6px;">
+        <button type="button" style="padding:4px 8px; font-size:0.75rem;" onclick="renameSubject('${sub.id}', '${sub.subject_name}')">✏️ Rename</button>
+        <button type="button" class="btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="deleteSubject('${sub.id}', '${sub.subject_name}')">🗑️ Remove</button>
+      </div>
+    `;
+    listContainer.appendChild(item);
+  });
+}
+
+async function renameSelectedStream() {
+  const streamId = document.getElementById('mgr-stream').value;
+  if (!streamId) return alert('Select a stream first.');
+
+  const streamObj = globalStreams.find(s => s.id === streamId);
+  const newName = prompt('Enter new Stream / Faculty name:', streamObj ? streamObj.stream_name : '');
+
+  if (newName && newName.trim()) {
+    const { error } = await supabaseClient
+      .from('streams')
+      .update({ stream_name: newName.trim() })
+      .eq('id', streamId);
+
+    if (error) alert(`Error: ${error.message}`);
+    else {
+      alert('✅ Stream renamed successfully!');
+      await fetchStreamsAndSubjects();
+      handleClassChange('mgr');
+    }
+  }
+}
+
+async function deleteSelectedStream() {
+  const streamId = document.getElementById('mgr-stream').value;
+  if (!streamId) return alert('Select a stream first.');
+
+  if (!confirm('🚨 Are you sure? Deleting a stream will remove ALL subjects and course connections attached to it!')) return;
+
+  const { error } = await supabaseClient
+    .from('streams')
+    .delete()
+    .eq('id', streamId);
+
+  if (error) alert(`Error deleting stream: ${error.message}`);
+  else {
+    alert('✅ Stream deleted successfully!');
+    await fetchStreamsAndSubjects();
+    handleClassChange('mgr');
+  }
+}
+
+async function renameSubject(subjectId, currentName) {
+  const newName = prompt('Enter new Subject Name:', currentName);
+  if (newName && newName.trim() && newName !== currentName) {
+    const { error } = await supabaseClient
+      .from('subjects')
+      .update({ subject_name: newName.trim() })
+      .eq('id', subjectId);
+
+    if (error) alert(`Error: ${error.message}`);
+    else {
+      alert('✅ Subject renamed successfully!');
+      await fetchStreamsAndSubjects();
+      loadManagerSubjects();
+    }
+  }
+}
+
+async function deleteSubject(subjectId, subjectName) {
+  if (!confirm(`🚨 Delete "${subjectName}"? Students enrolled in this course will lose access.`)) return;
+
+  try {
+    await supabaseClient.from('student_courses').delete().eq('subject_id', subjectId);
+
+    const { error } = await supabaseClient.from('subjects').delete().eq('id', subjectId);
+    if (error) throw error;
+
+    alert(`✅ Subject "${subjectName}" removed.`);
+    await fetchStreamsAndSubjects();
+    loadManagerSubjects();
+  } catch (err) {
+    alert(`Error removing subject: ${err.message}`);
   }
 }
 
@@ -88,7 +366,7 @@ function loadAvailableSubjects(prefix) {
   });
 
   if (filtered.length === 0) {
-    picklist.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">No subjects found for this selection. Use "Create New Subject" button to add one.</p>';
+    picklist.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">No subjects found for this selection.</p>';
     return;
   }
 
@@ -190,73 +468,6 @@ function loadUploadSubjects() {
   });
 
   uploadSubject.disabled = false;
-}
-
-function toggleModalSemesterField() {
-  const classLevel = document.getElementById('modal-class').value;
-  const semGroup = document.getElementById('modal-semester-group');
-  if (classLevel === 'bachelor') {
-    semGroup.classList.remove('hidden');
-  } else {
-    semGroup.classList.add('hidden');
-  }
-}
-
-function openModal(id) {
-  document.getElementById(id).classList.remove('hidden');
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.add('hidden');
-}
-
-async function addNewSubject() {
-  const classLevel = document.getElementById('modal-class').value;
-  const semesterVal = classLevel === 'bachelor' ? document.getElementById('modal-semester').value : null;
-  const streamName = document.getElementById('modal-stream').value.trim();
-  const subjectName = document.getElementById('modal-subject-name').value.trim();
-
-  if (!streamName || !subjectName) {
-    alert('Please complete stream and subject names.');
-    return;
-  }
-
-  const cleanStreamName = streamName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-  const cleanSubjectName = subjectName.toLowerCase().replace(/[^a-z0-9]/g, '_');
-  
-  const streamId = `${classLevel}-${cleanStreamName}`;
-  const rawSubjectId = classLevel === 'bachelor' 
-    ? `${streamId}-${semesterVal}-${cleanSubjectName}` 
-    : `${streamId}-${cleanSubjectName}`;
-
-  try {
-    await supabaseClient
-      .from('streams')
-      .upsert([{ id: streamId, class_level: classLevel, stream_name: streamName }]);
-
-    const { error } = await supabaseClient
-      .from('subjects')
-      .insert([{
-        id: rawSubjectId,
-        subject_name: subjectName,
-        pdf_storage_path: `${rawSubjectId}/notes.pdf`,
-        class_level: classLevel,
-        stream_id: streamId,
-        semester: semesterVal
-      }]);
-
-    if (error) throw error;
-
-    alert(`✅ Subject "${subjectName}" created successfully!`);
-    closeModal('subject-modal');
-    
-    await fetchStreamsAndSubjects();
-    handleClassChange('stu');
-    handleClassChange('upload');
-
-  } catch (err) {
-    alert(`Error: ${err.message}`);
-  }
 }
 
 document.getElementById('account-form').addEventListener('submit', async (e) => {

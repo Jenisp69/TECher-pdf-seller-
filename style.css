@@ -1,3 +1,6 @@
+/* ==========================================
+   Global Variables & Reset
+   ========================================== */
 :root {
   --bg-main: #090d16;
   --bg-glass: rgba(22, 30, 46, 0.65);
@@ -12,7 +15,11 @@
   --border-glass: rgba(255, 255, 255, 0.12);
   --border-glass-light: rgba(255, 255, 255, 0.2);
   --danger: #ef4444;
+  --danger-hover: #dc2626;
   --success: #10b981;
+  --success-hover: #059669;
+  --radius: 12px;
+  --transition: all 0.25s ease;
 }
 
 * {
@@ -34,7 +41,7 @@ body {
   position: relative;
 }
 
-/* Glass Background Glow Orbs */
+/* Background Glow Orbs */
 .blob {
   position: fixed;
   border-radius: 50%;
@@ -62,9 +69,12 @@ body {
   max-width: 900px;
   margin: 0 auto;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-/* Glass Navbar */
+/* Navbar */
 .glass-navbar {
   position: sticky;
   top: 0;
@@ -109,7 +119,7 @@ body {
   color: var(--accent);
 }
 
-/* Modal Header & Logo Dimension Guard */
+/* Brand Header & Logo Guard */
 .brand-header {
   text-align: center;
   margin-bottom: 16px;
@@ -138,7 +148,7 @@ body {
   margin-top: 4px;
 }
 
-/* Glass Cards & Elements */
+/* Cards */
 .glass-card {
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
@@ -150,7 +160,6 @@ body {
   margin-bottom: 24px;
 }
 
-/* Hero Section */
 .hero-card {
   margin-top: 10px;
   background: linear-gradient(135deg, rgba(59, 130, 246, 0.12) 0%, rgba(139, 92, 246, 0.08) 100%), var(--bg-glass);
@@ -183,25 +192,6 @@ body {
   font-weight: 600;
 }
 
-/* Section Controls */
-.section-container {
-  margin-bottom: 28px;
-}
-
-.section-header {
-  margin-bottom: 16px;
-}
-
-.section-header h2 {
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-
-.section-subtitle {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
-
 /* Course Grid Cards */
 .course-grid {
   display: grid;
@@ -217,7 +207,7 @@ body {
   border-radius: 16px;
   padding: 18px;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: var(--transition);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -230,10 +220,17 @@ body {
   background: var(--bg-glass-hover);
 }
 
-.course-title {
-  font-size: 1.1rem;
-  font-weight: 700;
+.course-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
   margin-bottom: 8px;
+}
+
+.course-title {
+  font-size: 1.05rem;
+  font-weight: 700;
   color: #fff;
 }
 
@@ -243,77 +240,75 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin-bottom: 16px;
 }
 
 .badge {
-  background: rgba(16, 185, 129, 0.15);
-  color: var(--success);
-  border: 1px solid rgba(16, 185, 129, 0.3);
   font-size: 0.72rem;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 12px;
+  white-space: nowrap;
 }
 
-/* Social Buttons Grid */
-.teacher-socials-card h3 {
-  font-size: 1.15rem;
-  margin-bottom: 6px;
+.badge.enrolled {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
-.teacher-socials-card p {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin-bottom: 18px;
+.badge.free {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+  border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
-.social-links-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+.badge.price {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
-.social-btn {
+/* Action Buttons */
+.btn-card-action {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: rgba(59, 130, 246, 0.2);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 12px;
-  text-decoration: none;
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #fff;
-  transition: all 0.2s ease;
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--border-glass);
+  gap: 8px;
 }
 
-.social-btn.facebook {
-  background: rgba(24, 119, 242, 0.2);
-  border-color: rgba(24, 119, 242, 0.4);
-}
-.social-btn.facebook:hover {
-  background: rgba(24, 119, 242, 0.4);
+.btn-card-action:hover {
+  background: var(--accent);
 }
 
-.social-btn.instagram {
-  background: rgba(225, 48, 108, 0.2);
-  border-color: rgba(225, 48, 108, 0.4);
-}
-.social-btn.instagram:hover {
-  background: rgba(225, 48, 108, 0.4);
+.btn-card-action.free {
+  border-color: var(--success);
+  background: rgba(16, 185, 129, 0.2);
 }
 
-.social-btn.whatsapp {
-  background: rgba(37, 211, 102, 0.2);
-  border-color: rgba(37, 211, 102, 0.4);
-}
-.social-btn.whatsapp:hover {
-  background: rgba(37, 211, 102, 0.4);
+.btn-card-action.free:hover {
+  background: var(--success);
 }
 
-/* Buttons & Profiles */
+.btn-card-action.pay {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.btn-card-action.pay:hover {
+  background: #f59e0b;
+}
+
+/* Buttons & Controls */
 .btn-primary-glass {
   width: 100%;
   background: var(--accent);
@@ -328,7 +323,7 @@ body {
   justify-content: center;
   gap: 8px;
   box-shadow: 0 4px 15px var(--accent-glow);
-  transition: all 0.2s ease;
+  transition: var(--transition);
 }
 
 .btn-primary-glass:hover {
@@ -354,7 +349,6 @@ body {
   gap: 12px;
   padding: 6px 12px;
   border-radius: 12px;
-  margin: 0;
   font-size: 0.9rem;
   font-weight: 600;
 }
@@ -372,7 +366,38 @@ body {
   justify-content: center;
 }
 
-/* Glass Modal Overhead Window Fix */
+/* Social Buttons Grid */
+.social-links-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.social-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #fff;
+  transition: var(--transition);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-glass);
+}
+
+.social-btn.facebook { background: rgba(24, 119, 242, 0.2); border-color: rgba(24, 119, 242, 0.4); }
+.social-btn.facebook:hover { background: rgba(24, 119, 242, 0.4); }
+.social-btn.instagram { background: rgba(225, 48, 108, 0.2); border-color: rgba(225, 48, 108, 0.4); }
+.social-btn.instagram:hover { background: rgba(225, 48, 108, 0.4); }
+.social-btn.whatsapp { background: rgba(37, 211, 102, 0.2); border-color: rgba(37, 211, 102, 0.4); }
+.social-btn.whatsapp:hover { background: rgba(37, 211, 102, 0.4); }
+
+/* Modals */
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -409,7 +434,66 @@ body {
   cursor: pointer;
 }
 
-/* Forms & Inputs */
+/* Price Box */
+.price-display-box {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.price-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.price-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.price-value.npr {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.price-value.usd {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* QR Display Guard */
+.qr-container {
+  text-align: center;
+  margin: 16px 0;
+}
+
+.payment-qr-img {
+  width: 200px;
+  height: 200px;
+  max-width: 200px;
+  max-height: 200px;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border-glass-light);
+  background: #fff;
+  padding: 8px;
+}
+
+.payment-instructions {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+/* Form Controls */
 .form-group {
   margin-bottom: 14px;
 }
@@ -432,6 +516,14 @@ label {
   position: absolute;
   left: 14px;
   color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.password-toggle-icon {
+  position: absolute;
+  right: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
   font-size: 0.9rem;
 }
 
@@ -491,51 +583,12 @@ input:focus, select:focus {
 .alert-box.error { color: var(--danger); background: rgba(239, 68, 68, 0.15); }
 .alert-box.success { color: var(--success); background: rgba(16, 185, 129, 0.15); }
 
-.btn-google {
-  background: #ffffff;
-  color: #1f2937;
-  border: none;
-  width: 100%;
-  height: 44px;
-  border-radius: 10px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  cursor: pointer;
-  margin-bottom: 14px;
-}
-
-.btn-inline {
-  width: auto;
-  height: 36px;
-  padding: 0 12px;
-  font-size: 0.8rem;
-  position: absolute;
-  right: 5px;
-  background: var(--accent);
-  border: none;
-  border-radius: 8px;
-  color: white;
-  cursor: pointer;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  text-align: center;
-  margin: 16px 0;
+.empty-text {
   color: var(--text-muted);
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-size: 0.9rem;
+  font-style: italic;
+  padding: 12px 0;
 }
-.divider::before, .divider::after {
-  content: '';
-  flex: 1;
-  border-bottom: 1px solid var(--border-glass);
-}
-.divider span { padding: 0 10px; }
 
 .hidden { display: none !important; }
 
@@ -552,6 +605,7 @@ input:focus, select:focus {
   border-bottom: 1px solid var(--border-glass);
   z-index: 1000;
 }
+
 
 .btn-sm {
   background: var(--bg-glass);

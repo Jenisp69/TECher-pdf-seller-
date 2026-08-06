@@ -1,11 +1,15 @@
-// Guest / Auth State Control
+// State variables
 let currentStudentUser = null;
+let allSubjectsCache = [];
+let userEnrollmentsSet = new Set();
+let activePaymentSubject = null;
 
-// Password Eye Toggle Handler
+const USD_EXCHANGE_RATE = 135; // 1 USD = ~135 NPR
+
+// Password Toggle Helper
 function togglePasswordVisibility(inputId, iconElement) {
   const input = document.getElementById(inputId);
   if (!input) return;
-
   if (input.type === 'password') {
     input.type = 'text';
     iconElement.classList.remove('fa-eye');
@@ -26,20 +30,6 @@ function closeAuthModal() {
   document.getElementById('auth-modal').classList.add('hidden');
 }
 
-// Action guard for guest users
-function requireAuthOrAction(actionType, courseSubject = null) {
-  if (!currentStudentUser) {
-    openAuthModal('login');
-  } else {
-    if (actionType === 'viewCourse' && courseSubject) {
-      openCourseViewer(currentStudentUser, courseSubject);
-    } else if (actionType === 'explore') {
-      document.getElementById('enrolled-courses-list')?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }
-}
-
-// Tab Switching Logic inside Modal
 function switchAuthTab(tab) {
   const loginForm = document.getElementById('login-form');
   const signupContainer = document.getElementById('signup-form-container');
@@ -64,7 +54,7 @@ function switchAuthTab(tab) {
   }
 }
 
-// Flexible Login
+// Login Handler
 async function handleLogin(event) {
   event.preventDefault();
   
@@ -74,7 +64,6 @@ async function handleLogin(event) {
 
   errorDiv.classList.add('hidden');
 
-  // Admin Route
   if (identifier === 'adminisgod' && password === 'godisadmin') {
     window.location.href = 'admin.html';
     return;
@@ -97,7 +86,6 @@ async function handleLogin(event) {
   const student = students[0];
   const sessionToken = crypto.randomUUID();
 
-  // Try updating token if column exists, ignore if not added yet
   await supabaseClient
     .from('students')
     .update({ active_session_token: sessionToken })
@@ -113,7 +101,7 @@ async function handleLogin(event) {
   updateUIForUser(student);
 }
 
-// Send OTP to Phone
+// Send OTP
 async function sendOtpCode() {
   const phone = document.getElementById('signup-phone').value.trim();
   const errorDiv = document.getElementById('login-error');
@@ -126,8 +114,7 @@ async function sendOtpCode() {
   }
 
   errorDiv.classList.add('hidden');
-  
-  const { error } = await supabaseClient.auth.signInWithOtp({ phone: phone });
+  const { error } = await supabaseClient.auth.signInWithOtp({ phone });
 
   if (error) {
     errorDiv.textContent = `OTP Error: ${error.message}`;
@@ -153,17 +140,15 @@ document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) 
 
   errorDiv.classList.add('hidden');
 
-  // 1. Password Matching Check
   if (password !== confirmPassword) {
     errorDiv.textContent = 'Passwords do not match. Please re-enter carefully.';
     errorDiv.classList.remove('hidden');
     return;
   }
 
-  // 2. Verify OTP if code was entered
   if (otp) {
     const { error: otpErr } = await supabaseClient.auth.verifyOtp({
-      phone: phone,
+      phone,
       token: otp,
       type: 'sms'
     });
@@ -178,16 +163,13 @@ document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) 
   const generatedUsername = phone.replace(/[^0-9]/g, '');
   const sessionToken = crypto.randomUUID();
   
-  // Construct registration payload
   const studentPayload = {
     username: generatedUsername,
-    password: password,
+    password,
     full_name: name,
-    phone_number: phone
+    phone_number: phone,
+    active_session_token: sessionToken
   };
-
-  // Safe fallback if token column exists
-  studentPayload.active_session_token = sessionToken;
 
   const { data: student, error: insertError } = await supabaseClient
     .from('students')
@@ -210,7 +192,7 @@ document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) 
   updateUIForUser(student);
 });
 
-// Google OAuth
+// Google Sign-In
 async function handleGoogleSignIn() {
   const { error } = await supabaseClient.auth.signInWithOAuth({
     provider: 'google',
@@ -224,7 +206,7 @@ async function handleGoogleSignIn() {
   }
 }
 
-// Sync OAuth session callback
+// Sync OAuth Callback
 async function handleOAuthCallback() {
   const { data: { session } } = await supabaseClient.auth.getSession();
   if (session && session.user) {
@@ -271,84 +253,229 @@ async function handleOAuthCallback() {
   }
 }
 
-// Render Public / Student Catalog
-async function renderCourseCatalog(student = null) {
-  const listContainer = document.getElementById('enrolled-courses-list');
-  if (!listContainer) return;
+// Master Load Data & Render Dashboard
+async function updateUIForUser(student) {
+  currentStudentUser = student;
 
-  listContainer.innerHTML = '<p style="color:var(--text-muted); padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading course catalog...</p>';
+  const loginBtn = document.getElementById('nav-login-btn');
+  const userProfile = document.getElementById('nav-user-profile');
+  const userNameEl = document.getElementById('nav-user-name');
+
+  const heroBadge = document.getElementById('hero-badge');
+  const heroTitle = document.getElementById('hero-title');
+  const heroSubtitle = document.getElementById('hero-subtitle');
+  const heroCtaBtn = document.getElementById('hero-cta-btn');
+
+  const enrolledSec = document.getElementById('enrolled-section');
+  const missingSec = document.getElementById('missing-section');
+
+  // Fetch complete catalog
+  const { data: subjects } = await supabaseClient.from('subjects').select('*');
+  allSubjectsCache = subjects || [];
+
+  missingSec?.classList.remove('hidden');
 
   if (student) {
-    const { data: enrollments, error } = await supabaseClient
+    loginBtn?.classList.add('hidden');
+    userProfile?.classList.remove('hidden');
+    if (userNameEl) userNameEl.textContent = student.full_name;
+
+    heroBadge.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> Student Dashboard';
+    heroTitle.textContent = `Welcome back, ${student.full_name}!`;
+    heroSubtitle.textContent = 'Manage your enrolled coursework, explore free reading books, or expand your study list.';
+    heroCtaBtn.innerHTML = '<i class="fa-solid fa-circle-play"></i> Jump to Enrolled Subjects';
+    heroCtaBtn.onclick = () => scrollToSection('enrolled-section');
+
+    enrolledSec?.classList.remove('hidden');
+
+    // Fetch user enrollments
+    const { data: enrollments } = await supabaseClient
       .from('student_courses')
-      .select('*, subjects(*)')
+      .select('subject_id')
       .eq('student_id', student.id);
 
-    if (error || !enrollments || enrollments.length === 0) {
-      listContainer.innerHTML = '<p style="color:var(--text-muted); padding: 20px;">No enrolled subjects found. Contact your teacher via the links below to get access.</p>';
-      return;
-    }
-
-    listContainer.innerHTML = '';
-    enrollments.forEach(item => {
-      if (item.subjects) renderCourseCard(item.subjects, listContainer, true);
-    });
+    userEnrollmentsSet = new Set((enrollments || []).map(e => e.subject_id));
   } else {
-    const { data: subjects, error } = await supabaseClient
-      .from('subjects')
-      .select('*');
+    loginBtn?.classList.remove('hidden');
+    userProfile?.classList.add('hidden');
 
-    if (error || !subjects || subjects.length === 0) {
-      listContainer.innerHTML = '<p style="color:var(--text-muted); padding: 20px;">No public courses available right now.</p>';
-      return;
+    heroBadge.innerHTML = '<i class="fa-solid fa-book"></i> Public Portal';
+    heroTitle.textContent = 'Master Your Engineering & Academic Studies';
+    heroSubtitle.textContent = 'Access live notes, curated course files, dynamic updates, and high-yield academic resources curated by top faculty.';
+    heroCtaBtn.innerHTML = '<i class="fa-solid fa-book-open"></i> Browse Free Books';
+    heroCtaBtn.onclick = () => scrollToSection('free-books-section');
+
+    enrolledSec?.classList.add('hidden');
+    userEnrollmentsSet.clear();
+  }
+
+  // Directly render all cached subjects without filtering
+  renderCategorizedSections(allSubjectsCache);
+}
+
+function populateFilterPills() {
+  // Filter bar removed from UI
+  return;
+}
+
+function applyFilters() {
+  renderCategorizedSections(allSubjectsCache);
+}
+
+// Render Categorized Sections with Page Count Sorting
+function renderCategorizedSections(subjectsList) {
+  const enrolledGrid = document.getElementById('enrolled-courses-list');
+  const freeBooksGrid = document.getElementById('free-books-list');
+  const missingGrid = document.getElementById('missing-courses-list');
+
+  enrolledGrid.innerHTML = '';
+  freeBooksGrid.innerHTML = '';
+  missingGrid.innerHTML = '';
+
+  let enrolledCount = 0;
+  let freeCount = 0;
+  let missingCount = 0;
+
+  // Sort subjects by total pages descending
+  const sortedSubjects = [...subjectsList].sort((a, b) => (b.total_pages || 0) - (a.total_pages || 0));
+
+  sortedSubjects.forEach(subject => {
+    const isFree = subject.is_free === true || Number(subject.price_npr) === 0;
+    const isEnrolled = userEnrollmentsSet.has(subject.id);
+
+    if (currentStudentUser) {
+      if (isEnrolled) {
+        renderCard(subject, enrolledGrid, 'enrolled');
+        enrolledCount++;
+      } else if (isFree) {
+        renderCard(subject, freeBooksGrid, 'free');
+        freeCount++;
+      } else {
+        renderCard(subject, missingGrid, 'missing');
+        missingCount++;
+      }
+    } else {
+      if (isFree) {
+        renderCard(subject, freeBooksGrid, 'guest_free');
+        freeCount++;
+      } else {
+        renderCard(subject, missingGrid, 'guest_premium');
+        missingCount++;
+      }
     }
+  });
 
-    listContainer.innerHTML = '';
-    subjects.forEach(subject => {
-      renderCourseCard(subject, listContainer, false);
-    });
+  if (currentStudentUser && enrolledCount === 0) {
+    enrolledGrid.innerHTML = '<p class="empty-text">No enrolled subjects available.</p>';
+  }
+  if (freeCount === 0) {
+    freeBooksGrid.innerHTML = '<p class="empty-text">No free books available right now.</p>';
+  }
+  if (missingCount === 0) {
+    missingGrid.innerHTML = '<p class="empty-text">No additional premium courses found.</p>';
   }
 }
 
-function renderCourseCard(subject, container, isEnrolled) {
+// Render Course Card Element
+function renderCard(subject, container, cardType) {
   const card = document.createElement('div');
   card.className = 'course-card';
-  
-  const tagSemester = subject.semester ? ` • ${subject.semester} Sem` : '';
+
+  const tagSem = subject.semester ? ` • ${subject.semester} Sem` : '';
+  const priceNpr = Number(subject.price_npr || 0);
+  const priceUsd = (priceNpr / USD_EXCHANGE_RATE).toFixed(2);
+
+  let badgeHTML = '';
+  let buttonHTML = '';
+
+  if (cardType === 'enrolled') {
+    badgeHTML = '<span class="badge enrolled">Enrolled</span>';
+    buttonHTML = `<button class="btn-card-action" onclick="openCourseViewer(currentStudentUser, '${subject.id}')"><i class="fa-solid fa-book-open"></i> Read Notes</button>`;
+  } else if (cardType === 'free') {
+    badgeHTML = '<span class="badge free">Free Book</span>';
+    buttonHTML = `<button class="btn-card-action free" onclick="openCourseViewer(currentStudentUser, '${subject.id}')"><i class="fa-solid fa-eye"></i> View Material</button>`;
+  } else if (cardType === 'guest_free') {
+    badgeHTML = '<span class="badge free">Free Book</span>';
+    buttonHTML = `<button class="btn-card-action free" onclick="openAuthModal('login')"><i class="fa-solid fa-right-to-bracket"></i> Login to Read</button>`;
+  } else if (cardType === 'missing') {
+    badgeHTML = `<span class="badge price">NPR ${priceNpr} (~$${priceUsd})</span>`;
+    buttonHTML = `<button class="btn-card-action pay" onclick="openPaymentModal('${subject.id}')"><i class="fa-solid fa-qrcode"></i> Buy / Enroll</button>`;
+  } else if (cardType === 'guest_premium') {
+    badgeHTML = `<span class="badge price">NPR ${priceNpr} (~$${priceUsd})</span>`;
+    buttonHTML = `<button class="btn-card-action pay" onclick="openAuthModal('login')"><i class="fa-solid fa-lock"></i> Login to Unlock</button>`;
+  }
 
   card.innerHTML = `
     <div>
-      <div class="course-title">${subject.subject_name}</div>
+      <div class="course-header-row">
+        <div class="course-title">${subject.subject_name}</div>
+        ${badgeHTML}
+      </div>
       <div class="course-meta">
         <i class="fa-regular fa-file-pdf accent-text"></i>
-        <span>${subject.total_pages || 0} Pages Available${tagSemester}</span>
+        <span>${subject.total_pages || 0} Pages${tagSem}</span>
       </div>
     </div>
-    <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-      <span class="badge">${isEnrolled ? 'Enrolled' : 'Guest Preview'}</span>
-      <i class="fa-solid fa-chevron-right accent-text"></i>
+    <div class="card-footer-action">
+      ${buttonHTML}
     </div>
   `;
-  
-  card.addEventListener('click', () => {
-    requireAuthOrAction('viewCourse', subject);
-  });
-  
+
   container.appendChild(card);
 }
 
-function openCourseViewer(student, subject) {
+// Payment QR Modal Handler
+function openPaymentModal(subjectId) {
+  if (!currentStudentUser) {
+    openAuthModal('login');
+    return;
+  }
+
+  const subject = allSubjectsCache.find(s => s.id === subjectId);
+  if (!subject) return;
+
+  activePaymentSubject = subject;
+
+  const priceNpr = Number(subject.price_npr || 0);
+  const priceUsd = (priceNpr / USD_EXCHANGE_RATE).toFixed(2);
+
+  document.getElementById('pay-subject-title').textContent = `Enroll in ${subject.subject_name}`;
+  document.getElementById('pay-price-npr').textContent = `NPR ${priceNpr}`;
+  document.getElementById('pay-price-usd').textContent = `$${priceUsd} USD`;
+
+  document.getElementById('payment-modal').classList.remove('hidden');
+}
+
+function closePaymentModal() {
+  document.getElementById('payment-modal').classList.add('hidden');
+  activePaymentSubject = null;
+}
+
+function confirmPaymentRequest() {
+  if (!activePaymentSubject) return;
+  const priceNpr = Number(activePaymentSubject.price_npr || 0);
+  const priceUsd = (priceNpr / USD_EXCHANGE_RATE).toFixed(2);
+  const text = `Hello Teacher, I want to enroll in "${activePaymentSubject.subject_name}" for NPR ${priceNpr} (~$${priceUsd} USD). My username/phone is: ${currentStudentUser?.phone_number || ''}. I have attached my payment voucher screenshot.`;
+  window.open(`https://wa.me/9779826109280?text=${encodeURIComponent(text)}`, '_blank');
+  closePaymentModal();
+}
+
+// Course Viewer Launcher
+function openCourseViewer(student, subjectId) {
+  const subject = allSubjectsCache.find(s => s.id === subjectId);
+  if (!subject) return;
+
   document.getElementById('homepage-section')?.classList.add('hidden');
   document.getElementById('reader-section')?.classList.remove('hidden');
-  
+
   const sessionData = {
-    studentName: student.full_name,
-    studentPhone: student.phone_number,
-    username: student.username,
+    studentName: student?.full_name || 'Guest User',
+    studentPhone: student?.phone_number || '',
+    username: student?.username || 'guest',
     subjectName: subject.subject_name,
     pdfPath: subject.pdf_storage_path,
-    studentId: student.id,
-    sessionToken: sessionStorage.getItem('sessionToken') || student.active_session_token
+    studentId: student?.id || 'guest',
+    sessionToken: sessionStorage.getItem('sessionToken') || student?.active_session_token || ''
   };
 
   if (typeof window.initReader === 'function') {
@@ -356,20 +483,8 @@ function openCourseViewer(student, subject) {
   }
 }
 
-function updateUIForUser(student) {
-  if (student) {
-    document.getElementById('nav-login-btn')?.classList.add('hidden');
-    document.getElementById('nav-user-profile')?.classList.remove('hidden');
-    
-    const userNameEl = document.getElementById('nav-user-name');
-    if (userNameEl) userNameEl.textContent = student.full_name;
-
-    renderCourseCatalog(student);
-  } else {
-    document.getElementById('nav-login-btn')?.classList.remove('hidden');
-    document.getElementById('nav-user-profile')?.classList.add('hidden');
-    renderCourseCatalog(null);
-  }
+function scrollToSection(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 }
 
 function checkSession() {

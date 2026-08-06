@@ -3,17 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ThinkAhead Portal</title>
+  <title>ThinkAhead Student Portal</title>
   <link rel="stylesheet" href="style.css">
   
-  <!-- Font Awesome Icons -->
+  <!-- Font Awesome & Libraries -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  
-  <!-- Supabase & PDF.js SDKs -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  
-  <!-- Google Sign-In Library -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
@@ -22,7 +18,7 @@
   <div class="blob blob-1"></div>
   <div class="blob blob-2"></div>
 
-  <!-- GLASS TOP NAVIGATION BAR -->
+  <!-- TOP GLASS NAVIGATION -->
   <header class="glass-navbar">
     <div class="nav-container">
       <div class="brand-logo-title" onclick="window.location.reload()">
@@ -31,13 +27,13 @@
       </div>
 
       <div class="nav-actions">
-        <!-- Guest State Controls -->
+        <!-- Guest State -->
         <button id="nav-login-btn" class="btn-glass-accent" onclick="openAuthModal('login')">
           <i class="fa-solid fa-right-to-bracket"></i>
           <span>Login / Register</span>
         </button>
 
-        <!-- Authenticated State Controls -->
+        <!-- Logged-In State -->
         <div id="nav-user-profile" class="hidden user-profile-pill glass-card">
           <span id="nav-user-name">Student</span>
           <button id="dash-logout-btn" class="btn-icon-danger" title="Logout">
@@ -48,41 +44,56 @@
     </div>
   </header>
 
-  <!-- MAIN HOMEPAGE (PUBLIC / GUEST VIEW) -->
+  <!-- MAIN PORTAL SECTION -->
   <main id="homepage-section" class="main-content container">
     
-    <!-- Hero Banner -->
+    <!-- DYNAMIC HERO BANNER -->
     <section class="hero-card glass-card">
       <div class="hero-body">
-        <span class="glass-badge"><i class="fa-solid fa-sparkles"></i> Public Student Portal</span>
-        <h1>Master Your Engineering & Academic Studies</h1>
-        <p>Access live notes, curated course files, dynamic updates, and high-yield academic resources curated by top faculty.</p>
+        <span class="glass-badge" id="hero-badge"><i class="fa-solid fa-book"></i> Public Portal</span>
+        <h1 id="hero-title">Master Your Engineering & Academic Studies</h1>
+        <p id="hero-subtitle">Access live notes, curated course files, dynamic updates, and high-yield academic resources curated by top faculty.</p>
         
         <div class="hero-cta-group">
-          <button class="btn-primary-glass" onclick="requireAuthOrAction('explore')">
-            <i class="fa-solid fa-book-open"></i> Browse My Enrolled Courses
+          <button class="btn-primary-glass" id="hero-cta-btn" onclick="scrollToSection('free-books-section')">
+            <i class="fa-solid fa-book-open"></i> Browse Free Books
           </button>
         </div>
       </div>
     </section>
 
-    <!-- Public / Enrolled Course Catalog -->
-    <section class="section-container">
+    <!-- 1. ENROLLED SUBJECTS SECTION -->
+    <section id="enrolled-section" class="section-container hidden">
       <div class="section-header">
-        <h2><i class="fa-solid fa-graduation-cap accent-text"></i> Available Subjects & Courses</h2>
-        <span class="section-subtitle">Click any course to access notes and study material</span>
+        <h2><i class="fa-solid fa-circle-check accent-text"></i> My Enrolled Courses</h2>
+        <span class="section-subtitle">Your active unlocked study subjects and resources</span>
       </div>
-
-      <div id="enrolled-courses-list" class="course-grid">
-        <!-- Dynamically populated via JS -->
-      </div>
+      <div id="enrolled-courses-list" class="course-grid"></div>
     </section>
 
-    <!-- TEACHER SOCIALS & CONTACT FOOTER CARD -->
+    <!-- 2. FREE BOOKS SECTION -->
+    <section id="free-books-section" class="section-container">
+      <div class="section-header">
+        <h2><i class="fa-solid fa-book-bookmark accent-text"></i> Free Books & Open Material</h2>
+        <span class="section-subtitle">Open-access reference books and general notes</span>
+      </div>
+      <div id="free-books-list" class="course-grid"></div>
+    </section>
+
+    <!-- 3. MISSING / UNLOCKED COURSES SECTION -->
+    <section id="missing-section" class="section-container">
+      <div class="section-header">
+        <h2><i class="fa-solid fa-lock accent-text"></i> Premium Courses Catalog</h2>
+        <span class="section-subtitle">Expand your learning setup — contact teacher to unlock these courses</span>
+      </div>
+      <div id="missing-courses-list" class="course-grid"></div>
+    </section>
+
+    <!-- TEACHER CONTACT & SOCIALS -->
     <section class="section-container">
       <div class="glass-card teacher-socials-card">
         <h3><i class="fa-solid fa-chalkboard-user accent-text"></i> Connect with Teacher</h3>
-        <p>Have questions regarding enrollment, classes, or note access? Connect directly through official social channels:</p>
+        <p>Have questions regarding enrollment, purchasing courses (NPR 1,350 / ~$10 USD approx.), or free materials? Reach out directly:</p>
         
         <div class="social-links-grid">
           <a href="https://www.facebook.com/share/1TRBbsSds2/" target="_blank" class="social-btn facebook">
@@ -105,33 +116,32 @@
 
   </main>
 
-  <!-- AUTHENTICATION MODAL (POPUP ON PROTECTED ACTION) -->
+  <!-- FIXED AUTHENTICATION MODAL -->
   <div id="auth-modal" class="modal-backdrop hidden">
     <div class="glass-modal">
       <button class="modal-close-btn" onclick="closeAuthModal()">&times;</button>
       
       <div class="brand-header">
         <img src="resources/thinkaheadlogo.jpeg" alt="ThinkAhead Logo" class="app-logo" onerror="this.style.display='none'">
-        <h2 class="app-title">Welcome to ThinkAhead</h2>
-        <p class="app-subtitle">Sign in or create an account to view secured subject notes</p>
+        <h2 class="app-title">ThinkAhead Portal</h2>
+        <p class="app-subtitle">Sign in to view locked study notes & free book material</p>
       </div>
 
-      <!-- Auth Mode Switcher -->
       <div class="auth-tabs">
         <button type="button" class="tab-btn active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
-        <button type="button" class="tab-btn" id="tab-signup" onclick="switchAuthTab('signup')">Sign Up (OTP/Google)</button>
+        <button type="button" class="tab-btn" id="tab-signup" onclick="switchAuthTab('signup')">Sign Up</button>
       </div>
 
       <div id="login-error" class="hidden alert-box error"></div>
       <div id="login-success" class="hidden alert-box success"></div>
 
-      <!-- FORM 1: STANDARD LOGIN -->
+      <!-- FORM 1: LOGIN -->
       <form id="login-form">
         <div class="form-group">
           <label for="username-input">Username / Phone</label>
           <div class="input-wrapper">
             <i class="fa-solid fa-user input-icon"></i>
-            <input type="text" id="username-input" placeholder="Enter your username or phone" required autocomplete="off">
+            <input type="text" id="username-input" placeholder="Enter username or phone" required autocomplete="off">
           </div>
         </div>
         
@@ -139,46 +149,43 @@
           <label for="password-input">Password</label>
           <div class="input-wrapper">
             <i class="fa-solid fa-lock input-icon"></i>
-            <input type="password" id="password-input" placeholder="Enter your password" required>
+            <input type="password" id="password-input" placeholder="Enter password" required>
             <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('password-input', this)"></i>
           </div>
         </div>
         
         <button type="submit" class="btn-primary-glass">
-          <span>Sign In to Continue</span>
+          <span>Sign In</span>
           <i class="fa-solid fa-arrow-right"></i>
         </button>
       </form>
 
-      <!-- FORM 2: PHONE / OTP / GOOGLE SIGNUP -->
+      <!-- FORM 2: SIGNUP -->
       <div id="signup-form-container" class="hidden">
-        
         <button type="button" class="btn-google" onclick="handleGoogleSignIn()">
           <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.2 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 10.8 0 12.3s.7 2.6 1.9 5l3.7-2.5z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.2-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z"/></svg>
           <span>Continue with Google</span>
         </button>
 
-        <div class="divider">
-          <span>OR REGISTER WITH PHONE</span>
-        </div>
+        <div class="divider"><span>OR REGISTER WITH PHONE</span></div>
 
         <form id="phone-otp-form">
           <div class="form-group">
             <label for="signup-name">Full Name</label>
-            <input type="text" id="signup-name" placeholder="e.g. Ramesh Thapa" required>
+            <input type="text" id="signup-name" placeholder="Full Name" required>
           </div>
 
           <div class="form-group">
             <label for="signup-phone">Phone Number</label>
             <div class="input-wrapper">
-              <input type="tel" id="signup-phone" placeholder="9845082551" required>
+              <input type="tel" id="signup-phone" placeholder="98XXXXXXXX" required>
               <button type="button" id="send-otp-btn" class="btn-inline" onclick="sendOtpCode()">Send OTP</button>
             </div>
           </div>
 
           <div id="otp-group" class="form-group hidden">
-            <label for="otp-input">6-Digit Verification Code (Optional)</label>
-            <input type="text" id="otp-input" placeholder="Enter OTP code if requested">
+            <label for="otp-input">Verification Code</label>
+            <input type="text" id="otp-input" placeholder="Enter 6-digit OTP">
           </div>
 
           <div class="form-group">
@@ -189,18 +196,10 @@
             </div>
           </div>
 
-          <!-- CONFIRM PASSWORD FIELD WITH COPY-PASTE BLOCKED -->
           <div class="form-group">
             <label for="signup-confirm-password">Confirm Password</label>
             <div class="input-wrapper">
-              <input type="password" 
-                     id="signup-confirm-password" 
-                     placeholder="Re-enter your password" 
-                     required 
-                     oncopy="return false;" 
-                     onpaste="return false;" 
-                     oncut="return false;" 
-                     oncontextmenu="return false;">
+              <input type="password" id="signup-confirm-password" placeholder="Re-enter password" required oncopy="return false;" onpaste="return false;" oncut="return false;" oncontextmenu="return false;">
               <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('signup-confirm-password', this)"></i>
             </div>
           </div>
@@ -210,7 +209,42 @@
           </button>
         </form>
       </div>
+    </div>
+  </div>
 
+  <!-- PAYMENT QR MODAL -->
+  <div id="payment-modal" class="modal-backdrop hidden">
+    <div class="glass-modal payment-modal-content">
+      <button class="modal-close-btn" onclick="closePaymentModal()">&times;</button>
+      
+      <div class="brand-header">
+        <img src="resources/pa" alt="ThinkAhead Logo" class="app-logo" onerror="this.style.display='none'">
+        <h2 id="pay-subject-title" class="app-title">Course Purchase</h2>
+        <p class="app-subtitle">Scan the QR code below to complete payment</p>
+      </div>
+
+      <div class="price-display-box">
+        <div class="price-row">
+          <span class="price-label">Price (NPR):</span>
+          <span id="pay-price-npr" class="price-value npr">NPR 0</span>
+        </div>
+        <div class="price-row">
+          <span class="price-label">Equivalent (USD):</span>
+          <span id="pay-price-usd" class="price-value usd">$0.00 USD</span>
+        </div>
+      </div>
+
+      <div class="qr-container">
+        <img src="resources/paymentqr.jpeg" alt="Payment QR Code" class="payment-qr-img">
+      </div>
+
+      <p class="payment-instructions">
+        Please upload your transaction screenshot or payment voucher ID to complete enrollment verification.
+      </p>
+
+      <button type="button" class="btn-primary-glass" onclick="confirmPaymentRequest()">
+        <i class="fa-brands fa-whatsapp"></i> Notify Teacher on WhatsApp
+      </button>
     </div>
   </div>
 
@@ -219,7 +253,7 @@
     <nav class="reader-nav">
       <button id="back-to-dash-btn" class="btn-sm">
         <i class="fa-solid fa-arrow-left"></i>
-        <span>Back to Homepage</span>
+        <span>Back to Portal</span>
       </button>
       
       <div class="jump-controls">

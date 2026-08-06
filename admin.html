@@ -28,26 +28,38 @@
       <!-- Level 1: Select or Add Level / Class -->
       <div class="form-group">
         <label>1. Select Level / Class</label>
-        <div style="display: flex; gap: 8px;">
+        <div class="action-row">
           <select id="mgr-class" onchange="handleClassChange('mgr')">
             <option value="">-- Select Class --</option>
           </select>
-          <button type="button" onclick="promptAddNewClass()" style="width: auto; padding: 0 12px; font-size: 0.8rem; background: var(--success);">➕ Add Level</button>
-          <button type="button" onclick="renameSelectedClass()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">✏️ Rename</button>
-          <button type="button" class="btn-danger" onclick="deleteSelectedClass()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">🗑️ Delete</button>
+          <button type="button" onclick="promptAddNewClass()" style="background: var(--success);">
+            ➕ <span class="btn-text">Add Level</span>
+          </button>
+          <button type="button" onclick="renameSelectedClass()">
+            ✏️ <span class="btn-text">Rename</span>
+          </button>
+          <button type="button" class="btn-danger" onclick="deleteSelectedClass()">
+            🗑️ <span class="btn-text">Delete</span>
+          </button>
         </div>
       </div>
 
       <!-- Level 2: Select or Add Stream / Faculty -->
       <div class="form-group">
         <label>2. Select Stream / Faculty</label>
-        <div style="display: flex; gap: 8px;">
+        <div class="action-row">
           <select id="mgr-stream" onchange="handleStreamChange('mgr')" disabled>
             <option value="">-- Select Level First --</option>
           </select>
-          <button type="button" id="mgr-add-stream-btn" onclick="promptAddNewStream()" disabled style="width: auto; padding: 0 12px; font-size: 0.8rem; background: var(--success);">➕ Add Stream</button>
-          <button type="button" onclick="renameSelectedStream()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">✏️ Rename</button>
-          <button type="button" class="btn-danger" onclick="deleteSelectedStream()" style="width: auto; padding: 0 12px; font-size: 0.8rem;">🗑️ Delete</button>
+          <button type="button" id="mgr-add-stream-btn" onclick="promptAddNewStream()" disabled style="background: var(--success);">
+            ➕ <span class="btn-text">Add Stream</span>
+          </button>
+          <button type="button" onclick="renameSelectedStream()">
+            ✏️ <span class="btn-text">Rename</span>
+          </button>
+          <button type="button" class="btn-danger" onclick="deleteSelectedStream()">
+            🗑️ <span class="btn-text">Delete</span>
+          </button>
         </div>
       </div>
 
@@ -71,7 +83,9 @@
       <div class="form-group">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <label style="margin-bottom: 0;">4. Manage Subjects in Selection</label>
-          <button type="button" id="mgr-add-subject-btn" onclick="promptAddNewSubject()" disabled style="width: auto; height: 32px; padding: 0 12px; font-size: 0.8rem; background: var(--success);">➕ Add Subject</button>
+          <button type="button" id="mgr-add-subject-btn" onclick="promptAddNewSubject()" disabled style="width: auto; height: 32px; font-size: 0.8rem; background: var(--success);">
+            ➕ <span class="btn-text">Add Subject</span>
+          </button>
         </div>
         <div id="mgr-subject-list" class="picklist-container">
           <p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">
@@ -81,7 +95,7 @@
       </div>
     </div>
 
-    <!-- CARD 2 (Student Account Generator) -->
+    <!-- CARD 2: Student Account Generator -->
     <div class="admin-card">
       <h2>
         <svg style="width:22px;height:22px;color:var(--accent);" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path></svg>
@@ -91,22 +105,22 @@
       <form id="account-form">
         <div class="form-group">
           <label>Full Name</label>
-          <input type="text" id="stu-name" required placeholder="e.g. Rohan Sharma" style="padding-left:14px;">
+          <input type="text" id="stu-name" required placeholder="e.g. Rohan Sharma">
         </div>
         
         <div class="form-group">
           <label>WhatsApp / Phone Number</label>
-          <input type="text" id="stu-phone" required placeholder="e.g. 9801234567" style="padding-left:14px;">
+          <input type="text" id="stu-phone" required placeholder="e.g. 9801234567">
         </div>
 
         <div class="form-group">
           <label>Assign Username</label>
-          <input type="text" id="stu-username" required placeholder="e.g. rohan123" style="padding-left:14px;">
+          <input type="text" id="stu-username" required placeholder="e.g. rohan123">
         </div>
 
         <div class="form-group">
           <label>Assign Password</label>
-          <input type="text" id="stu-password" required placeholder="e.g. pass456" style="padding-left:14px;">
+          <input type="text" id="stu-password" required placeholder="e.g. pass456">
         </div>
 
         <!-- Dynamic Hierarchy Filters -->
@@ -256,9 +270,9 @@
       <div id="student-details-container" class="hidden">
         <hr style="border: 0; border-top: 1px solid var(--border); margin: 15px 0;">
         
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
           <h3 style="font-size: 1rem; margin: 0;">Enrolled Subjects for <span id="display-student-name" style="color: var(--primary);"></span></h3>
-          <button type="button" onclick="deleteStudentAccount()" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 600;">
+          <button type="button" onclick="deleteStudentAccount()" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 600; width: auto;">
             🗑️ Delete Student Account
           </button>
         </div>
@@ -303,7 +317,7 @@
           </select>
         </div>
 
-        <button type="button" class="btn" onclick="addSubjectToSelectedStudent()" style="width: 100%;">+ Add Subject to Student</button>
+        <button type="button" class="btn" onclick="addSubjectToSelectedStudent()">+ Add Subject to Student</button>
       </div>
     </div>
 
@@ -324,23 +338,17 @@
       <form id="admin-lock-form" onsubmit="handleAdminLogin(event)">
         <div style="margin-bottom: 15px; text-align: left;">
           <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Admin ID / Username</label>
-          <input type="text" id="admin-user-input" required autocomplete="off" style="
-            width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
-          ">
+          <input type="text" id="admin-user-input" required autocomplete="off">
         </div>
         
         <div style="margin-bottom: 20px; text-align: left;">
           <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Password</label>
-          <input type="password" id="admin-pass-input" required style="
-            width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: white; box-sizing: border-box;
-          ">
+          <input type="password" id="admin-pass-input" required>
         </div>
 
         <div id="admin-lock-error" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 15px; display: none;"></div>
 
-        <button type="submit" style="
-          width: 100%; padding: 12px; background: #2563eb; color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
-        ">Unlock Dashboard</button>
+        <button type="submit" style="background: #2563eb; font-weight: bold;">Unlock Dashboard</button>
       </form>
     </div>
   </div>

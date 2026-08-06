@@ -1,15 +1,24 @@
-let globalClasses = [
+const DEFAULT_CLASSES = [
   { id: '11', name: 'Class 11' },
   { id: '12', name: 'Class 12' },
   { id: 'bachelor', name: 'Bachelor Level' }
 ];
+
+// Load persisted classes or fall back to default list
+let globalClasses = JSON.parse(localStorage.getItem('admin_global_classes')) || DEFAULT_CLASSES;
 let globalSubjects = [];
 let globalStreams = [];
 let selectedSubjectsCart = [];
 let globalStudents = [];
 let activeStudentId = null;
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+function saveClassesToStorage() {
+  localStorage.setItem('admin_global_classes', JSON.stringify(globalClasses));
+}
 
 async function initAdmin() {
   await fetchStreamsAndSubjects();
@@ -112,7 +121,7 @@ function handleStreamChange(prefix) {
   }
 }
 
-/* Dynamic Add, Rename & Delete Handlers for Hierarchy */
+/* Persistent Dynamic Class Handlers */
 function promptAddNewClass() {
   const name = prompt("Enter New Level / Class Name (e.g. Master Level, Diploma):");
   if (!name || !name.trim()) return;
@@ -125,13 +134,14 @@ function promptAddNewClass() {
   }
 
   globalClasses.push({ id: val, name: cleanName });
+  saveClassesToStorage();
   populateClassDropdowns();
 
   document.getElementById('mgr-class').value = val;
   handleClassChange('mgr');
 }
 
-function renameSelectedClass() {
+async function renameSelectedClass() {
   const classVal = document.getElementById('mgr-class').value;
   if (!classVal) return alert('Please select a Class / Level to rename.');
 
@@ -140,20 +150,46 @@ function renameSelectedClass() {
 
   if (newName && newName.trim()) {
     clsObj.name = newName.trim();
+    saveClassesToStorage();
+    
+    await supabaseClient
+      .from('streams')
+      .update({ class_level: classVal })
+      .eq('class_level', classVal);
+
     populateClassDropdowns();
     document.getElementById('mgr-class').value = classVal;
+    alert('✅ Level updated!');
   }
 }
 
-function deleteSelectedClass() {
+async function deleteSelectedClass() {
   const classVal = document.getElementById('mgr-class').value;
   if (!classVal) return alert('Please select a Class / Level to delete.');
 
-  if (!confirm('🚨 Are you sure? Removing this Level will clear associated selections.')) return;
+  if (!confirm('🚨 Are you sure? Removing this Level will delete associated streams and subjects.')) return;
 
-  globalClasses = globalClasses.filter(c => c.id !== classVal);
-  populateClassDropdowns();
-  handleClassChange('mgr');
+  try {
+    const { data: streams } = await supabaseClient
+      .from('streams')
+      .select('id')
+      .eq('class_level', classVal);
+      
+    if (streams && streams.length > 0) {
+      const streamIds = streams.map(s => s.id);
+      await supabaseClient.from('subjects').delete().in('stream_id', streamIds);
+      await supabaseClient.from('streams').delete().eq('class_level', classVal);
+    }
+
+    globalClasses = globalClasses.filter(c => c.id !== classVal);
+    saveClassesToStorage();
+    populateClassDropdowns();
+    handleClassChange('mgr');
+    await fetchStreamsAndSubjects();
+    alert('✅ Level and associated data removed.');
+  } catch (err) {
+    alert(`Error deleting level: ${err.message}`);
+  }
 }
 
 async function promptAddNewStream() {
@@ -262,8 +298,8 @@ function loadManagerSubjects() {
         <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'All'}</span>
       </div>
       <div style="display:flex; gap:6px;">
-        <button type="button" style="padding:4px 8px; font-size:0.75rem;" onclick="renameSubject('${sub.id}', '${sub.subject_name}')">✏️ Rename</button>
-        <button type="button" class="btn-danger" style="padding:4px 8px; font-size:0.75rem;" onclick="deleteSubject('${sub.id}', '${sub.subject_name}')">🗑️ Remove</button>
+        <button type="button" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="renameSubject('${sub.id}', '${sub.subject_name}')">✏️ Rename</button>
+        <button type="button" class="btn-danger" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="deleteSubject('${sub.id}', '${sub.subject_name}')">🗑️ Remove</button>
       </div>
     `;
     listContainer.appendChild(item);
@@ -287,7 +323,10 @@ async function renameSelectedStream() {
     else {
       alert('✅ Stream renamed successfully!');
       await fetchStreamsAndSubjects();
+      const currentClass = document.getElementById('mgr-class').value;
       handleClassChange('mgr');
+      document.getElementById('mgr-class').value = currentClass;
+      document.getElementById('mgr-stream').value = streamId;
     }
   }
 }
@@ -296,18 +335,24 @@ async function deleteSelectedStream() {
   const streamId = document.getElementById('mgr-stream').value;
   if (!streamId) return alert('Select a stream first.');
 
-  if (!confirm('🚨 Are you sure? Deleting a stream will remove ALL subjects and course connections attached to it!')) return;
+  if (!confirm('🚨 Are you sure? Deleting a stream will remove ALL subjects attached to it!')) return;
 
-  const { error } = await supabaseClient
-    .from('streams')
-    .delete()
-    .eq('id', streamId);
+  try {
+    const { data: subs } = await supabaseClient.from('subjects').select('id').eq('stream_id', streamId);
+    if (subs && subs.length > 0) {
+      const subIds = subs.map(s => s.id);
+      await supabaseClient.from('student_courses').delete().in('subject_id', subIds);
+      await supabaseClient.from('subjects').delete().eq('stream_id', streamId);
+    }
 
-  if (error) alert(`Error deleting stream: ${error.message}`);
-  else {
+    const { error } = await supabaseClient.from('streams').delete().eq('id', streamId);
+    if (error) throw error;
+
     alert('✅ Stream deleted successfully!');
     await fetchStreamsAndSubjects();
     handleClassChange('mgr');
+  } catch (err) {
+    alert(`Error deleting stream: ${err.message}`);
   }
 }
 
@@ -470,7 +515,7 @@ function loadUploadSubjects() {
   uploadSubject.disabled = false;
 }
 
-document.getElementById('account-form').addEventListener('submit', async (e) => {
+document.getElementById('account-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   
   const name = document.getElementById('stu-name').value.trim();
@@ -818,7 +863,7 @@ async function renderStudentEnrolledCourses(studentId) {
         <b>${sub.subject_name}</b>
         <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'N/A'}</span>
       </div>
-      <button type="button" class="btn-danger" style="padding:4px 10px; font-size:0.8rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="removeSubjectFromStudent('${item.id}', '${sub.id}')">
+      <button type="button" class="btn-danger" style="padding:4px 10px; font-size:0.8rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; width: auto;" onclick="removeSubjectFromStudent('${item.id}', '${sub.id}')">
         🗑️ Remove Course
       </button>
     `;

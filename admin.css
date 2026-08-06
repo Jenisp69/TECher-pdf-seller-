@@ -96,6 +96,8 @@ h3 {
   border-radius: var(--radius);
   padding: 24px;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.18);
+  width: 100%;
+  max-width: 100%;
 }
 
 .form-group {
@@ -103,6 +105,7 @@ h3 {
   flex-direction: column;
   gap: 6px;
   margin-bottom: 16px;
+  width: 100%;
 }
 
 .form-group label {
@@ -114,9 +117,11 @@ h3 {
 }
 
 input[type="text"],
+input[type="password"],
 input[type="file"],
 select {
   width: 100%;
+  max-width: 100%;
   height: 42px;
   background: var(--bg-input);
   border: 1px solid var(--border);
@@ -129,6 +134,7 @@ select {
 }
 
 input[type="text"]:focus,
+input[type="password"]:focus,
 select:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
@@ -140,6 +146,28 @@ input:disabled {
   cursor: not-allowed;
 }
 
+/* Dynamic Action Button Control Rows */
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.action-row select {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+.action-row button {
+  flex: 0 0 auto;
+  width: auto;
+  height: 42px;
+  padding: 0 12px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
 /* ==========================================
    Buttons & Upload Layout
    ========================================== */
@@ -147,7 +175,7 @@ button, .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   height: 44px;
   background: var(--primary);
@@ -158,6 +186,7 @@ button, .btn {
   font-weight: 600;
   cursor: pointer;
   transition: var(--transition);
+  white-space: nowrap;
 }
 
 button:hover, .btn:hover {
@@ -173,7 +202,6 @@ button:hover, .btn:hover {
   background: var(--danger-hover) !important;
 }
 
-/* Upload Action Buttons Grid/Flex Container */
 .upload-buttons-container {
   display: flex;
   flex-direction: column;
@@ -183,12 +211,18 @@ button:hover, .btn:hover {
 
 .upload-top-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .upload-top-row button {
-  flex: 1;
+  flex: 1 1 140px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #upload-btn-auto {
@@ -206,17 +240,6 @@ button:hover, .btn:hover {
 
 #upload-btn-std {
   background: #64748b;
-}
-
-/* Adjust text wrapping on narrow mobile screens */
-@media (max-width: 480px) {
-  .upload-top-row {
-    flex-direction: row;
-  }
-  .upload-top-row button {
-    font-size: 0.82rem;
-    padding: 0 6px;
-  }
 }
 
 /* ==========================================
@@ -279,7 +302,6 @@ button:hover, .btn:hover {
   border-color: var(--success);
 }
 
-/* Selected Subjects Basket / Cart */
 .cart-container {
   background: var(--bg-main);
   border: 1px solid var(--border);
@@ -317,13 +339,12 @@ button:hover, .btn:hover {
 }
 
 /* ==========================================
-   Utility Classes
+   Utility Classes & Scrollbars
    ========================================== */
 .hidden {
   display: none !important;
 }
 
-/* Custom Scrollbar for picklists */
 ::-webkit-scrollbar {
   width: 6px;
 }
@@ -333,4 +354,30 @@ button:hover, .btn:hover {
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
+}
+
+/* Screen sizes matching DevTools emulation (iPhone 12 Pro / Mobile) */
+@media (max-width: 480px) {
+  .admin-card {
+    padding: 14px;
+  }
+
+  .action-row button {
+    flex: 1 1 calc(33.333% - 6px);
+    padding: 0 4px;
+    font-size: 0.75rem;
+  }
+
+  .upload-top-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .upload-top-row button {
+    flex: 1 1 100%;
+    width: 100%;
+    font-size: 0.78rem;
+    padding: 10px;
+    text-align: center;
+  }
 }

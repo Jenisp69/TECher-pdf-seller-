@@ -4,8 +4,6 @@ let allSubjectsCache = [];
 let userEnrollmentsSet = new Set();
 let activePaymentSubject = null;
 
-const USD_EXCHANGE_RATE = 135; // 1 USD = ~135 NPR
-
 // Password Toggle Helper
 function togglePasswordVisibility(inputId, iconElement) {
   const input = document.getElementById(inputId);
@@ -309,12 +307,11 @@ async function updateUIForUser(student) {
     userEnrollmentsSet.clear();
   }
 
-  // Directly render all cached subjects without filtering
+  // Render valid subjects with page count > 0
   renderCategorizedSections(allSubjectsCache);
 }
 
 function populateFilterPills() {
-  // Filter bar removed from UI
   return;
 }
 
@@ -322,7 +319,7 @@ function applyFilters() {
   renderCategorizedSections(allSubjectsCache);
 }
 
-// Render Categorized Sections with Page Count Sorting
+// Render Categorized Sections (Filters out 0-page courses & sorts by total pages descending)
 function renderCategorizedSections(subjectsList) {
   const enrolledGrid = document.getElementById('enrolled-courses-list');
   const freeBooksGrid = document.getElementById('free-books-list');
@@ -336,8 +333,11 @@ function renderCategorizedSections(subjectsList) {
   let freeCount = 0;
   let missingCount = 0;
 
-  // Sort subjects by total pages descending
-  const sortedSubjects = [...subjectsList].sort((a, b) => (b.total_pages || 0) - (a.total_pages || 0));
+  // 1. Filter out courses with 0 or missing pages
+  const validSubjects = subjectsList.filter(subject => Number(subject.total_pages || 0) > 0);
+
+  // 2. Sort remaining subjects by total pages descending
+  const sortedSubjects = [...validSubjects].sort((a, b) => (b.total_pages || 0) - (a.total_pages || 0));
 
   sortedSubjects.forEach(subject => {
     const isFree = subject.is_free === true || Number(subject.price_npr) === 0;
@@ -383,7 +383,6 @@ function renderCard(subject, container, cardType) {
 
   const tagSem = subject.semester ? ` • ${subject.semester} Sem` : '';
   const priceNpr = Number(subject.price_npr || 0);
-  const priceUsd = (priceNpr / USD_EXCHANGE_RATE).toFixed(2);
 
   let badgeHTML = '';
   let buttonHTML = '';
@@ -398,10 +397,10 @@ function renderCard(subject, container, cardType) {
     badgeHTML = '<span class="badge free">Free Book</span>';
     buttonHTML = `<button class="btn-card-action free" onclick="openAuthModal('login')"><i class="fa-solid fa-right-to-bracket"></i> Login to Read</button>`;
   } else if (cardType === 'missing') {
-    badgeHTML = `<span class="badge price">NPR ${priceNpr} (~$${priceUsd})</span>`;
+    badgeHTML = `<span class="badge price">NPR ${priceNpr}</span>`;
     buttonHTML = `<button class="btn-card-action pay" onclick="openPaymentModal('${subject.id}')"><i class="fa-solid fa-qrcode"></i> Buy / Enroll</button>`;
   } else if (cardType === 'guest_premium') {
-    badgeHTML = `<span class="badge price">NPR ${priceNpr} (~$${priceUsd})</span>`;
+    badgeHTML = `<span class="badge price">NPR ${priceNpr}</span>`;
     buttonHTML = `<button class="btn-card-action pay" onclick="openAuthModal('login')"><i class="fa-solid fa-lock"></i> Login to Unlock</button>`;
   }
 
@@ -437,11 +436,9 @@ function openPaymentModal(subjectId) {
   activePaymentSubject = subject;
 
   const priceNpr = Number(subject.price_npr || 0);
-  const priceUsd = (priceNpr / USD_EXCHANGE_RATE).toFixed(2);
 
   document.getElementById('pay-subject-title').textContent = `Enroll in ${subject.subject_name}`;
   document.getElementById('pay-price-npr').textContent = `NPR ${priceNpr}`;
-  document.getElementById('pay-price-usd').textContent = `$${priceUsd} USD`;
 
   document.getElementById('payment-modal').classList.remove('hidden');
 }
@@ -454,8 +451,7 @@ function closePaymentModal() {
 function confirmPaymentRequest() {
   if (!activePaymentSubject) return;
   const priceNpr = Number(activePaymentSubject.price_npr || 0);
-  const priceUsd = (priceNpr / USD_EXCHANGE_RATE).toFixed(2);
-  const text = `Hello Teacher, I want to enroll in "${activePaymentSubject.subject_name}" for NPR ${priceNpr} (~$${priceUsd} USD). My username/phone is: ${currentStudentUser?.phone_number || ''}. I have attached my payment voucher screenshot.`;
+  const text = `Hello Teacher, I want to enroll in "${activePaymentSubject.subject_name}" for NPR ${priceNpr}. My username/phone is: ${currentStudentUser?.phone_number || ''}. I have attached my payment voucher screenshot.`;
   window.open(`https://wa.me/9779826109280?text=${encodeURIComponent(text)}`, '_blank');
   closePaymentModal();
 }

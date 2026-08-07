@@ -236,6 +236,9 @@ async function promptAddNewSubject() {
   const subjectName = prompt('Enter New Subject Name:');
   if (!subjectName || !subjectName.trim()) return;
 
+  const priceInput = prompt('Enter Course Price in NPR (Enter 0 for Free):', '0');
+  const priceNpr = parseFloat(priceInput) || 0;
+
   const cleanSubjectName = subjectName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_');
   const rawSubjectId = classVal === 'bachelor'
     ? `${streamId}-${semVal}-${cleanSubjectName}`
@@ -250,12 +253,14 @@ async function promptAddNewSubject() {
         pdf_storage_path: `${rawSubjectId}/notes.pdf`,
         class_level: classVal,
         stream_id: streamId,
-        semester: classVal === 'bachelor' ? semVal : null
+        semester: classVal === 'bachelor' ? semVal : null,
+        price_npr: priceNpr,
+        is_free: priceNpr === 0
       }]);
 
     if (error) throw error;
 
-    alert(`✅ Subject "${subjectName}" created!`);
+    alert(`✅ Subject "${subjectName}" created with price NPR ${priceNpr}!`);
     await fetchStreamsAndSubjects();
     loadManagerSubjects();
 
@@ -295,15 +300,42 @@ function loadManagerSubjects() {
     item.innerHTML = `
       <div class="picklist-title">
         <b>${sub.subject_name}</b>
-        <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'All'}</span>
+        <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'All'} | NPR ${sub.price_npr || 0} (${sub.total_pages || 0} Pages)</span>
       </div>
       <div style="display:flex; gap:6px;">
+        <button type="button" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="editSubjectPrice('${sub.id}', ${sub.price_npr || 0})">💰 Price</button>
         <button type="button" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="renameSubject('${sub.id}', '${sub.subject_name}')">✏️ Rename</button>
         <button type="button" class="btn-danger" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="deleteSubject('${sub.id}', '${sub.subject_name}')">🗑️ Remove</button>
       </div>
     `;
     listContainer.appendChild(item);
   });
+}
+
+async function editSubjectPrice(subjectId, currentPrice) {
+  const newPriceInput = prompt('Enter new Price in NPR (0 for Free):', currentPrice);
+  if (newPriceInput === null) return;
+
+  const newPrice = parseFloat(newPriceInput);
+  if (isNaN(newPrice) || newPrice < 0) {
+    return alert('Invalid price entered.');
+  }
+
+  const { error } = await supabaseClient
+    .from('subjects')
+    .update({ 
+      price_npr: newPrice,
+      is_free: newPrice === 0 
+    })
+    .eq('id', subjectId);
+
+  if (error) {
+    alert(`Error updating price: ${error.message}`);
+  } else {
+    alert(`✅ Price updated successfully! New Price: NPR ${newPrice}`);
+    await fetchStreamsAndSubjects();
+    loadManagerSubjects();
+  }
 }
 
 async function renameSelectedStream() {
@@ -429,7 +461,7 @@ function loadAvailableSubjects(prefix) {
     item.innerHTML = `
       <div class="picklist-title">
         ${subject.subject_name}
-        <span class="picklist-tag">${tagInfo}</span>
+        <span class="picklist-tag">${tagInfo} | NPR ${subject.price_npr || 0}</span>
       </div>
       <button type="button" class="btn-toggle-add ${isAdded ? 'added' : ''}" onclick="toggleSubjectCart('${subject.id}')">
         ${isAdded ? '✓ Added' : '➕ Add'}
@@ -477,7 +509,7 @@ function renderCart() {
       : `${subject.stream_name}`;
 
     badge.innerHTML = `
-      <span>🏷️ <b>${subject.subject_name}</b> <small>(${metaTag})</small></span>
+      <span>🏷️ <b>${subject.subject_name}</b> <small>(${metaTag} - NPR ${subject.price_npr || 0})</small></span>
       <span class="cart-badge-remove" onclick="toggleSubjectCart('${subject.id}')">✕</span>
     `;
     
@@ -508,7 +540,7 @@ function loadUploadSubjects() {
   filtered.forEach(subject => {
     const opt = document.createElement('option');
     opt.value = subject.id;
-    opt.textContent = subject.subject_name;
+    opt.textContent = `${subject.subject_name} (NPR ${subject.price_npr || 0})`;
     uploadSubject.appendChild(opt);
   });
 
@@ -861,7 +893,7 @@ async function renderStudentEnrolledCourses(studentId) {
     div.innerHTML = `
       <div class="picklist-title">
         <b>${sub.subject_name}</b>
-        <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'N/A'}</span>
+        <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'N/A'} | NPR ${sub.price_npr || 0}</span>
       </div>
       <button type="button" class="btn-danger" style="padding:4px 10px; font-size:0.8rem; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; width: auto;" onclick="removeSubjectFromStudent('${item.id}', '${sub.id}')">
         🗑️ Remove Course
@@ -983,7 +1015,7 @@ function loadAddableSubjects() {
   filtered.forEach(s => {
     const opt = document.createElement('option');
     opt.value = s.id;
-    opt.textContent = s.subject_name;
+    opt.textContent = `${s.subject_name} (NPR ${s.price_npr || 0})`;
     subSelect.appendChild(opt);
   });
 

@@ -3,6 +3,38 @@ let currentStudentUser = null;
 let allSubjectsCache = [];
 let userEnrollmentsSet = new Set();
 let activePaymentSubject = null;
+let globalSessionGuardInterval = null;
+
+/* ==========================================
+   GLOBAL SESSION GUARD
+   ========================================== */
+function startGlobalSessionGuard() {
+  if (globalSessionGuardInterval) clearInterval(globalSessionGuardInterval);
+
+  globalSessionGuardInterval = setInterval(async () => {
+    const studentId = sessionStorage.getItem('studentId');
+    const sessionToken = sessionStorage.getItem('sessionToken');
+
+    if (!studentId || !sessionToken || typeof supabaseClient === 'undefined') return;
+
+    try {
+      const { data, error } = await supabaseClient
+        .from('students')
+        .select('active_session_token')
+        .eq('id', studentId)
+        .single();
+
+      if (error || !data || data.active_session_token !== sessionToken) {
+        clearInterval(globalSessionGuardInterval);
+        alert('Your account was logged in from another device or location.');
+        sessionStorage.clear();
+        window.location.reload();
+      }
+    } catch (e) {
+      console.warn('Session check warning:', e);
+    }
+  }, 15000); // Checks every 15 seconds globally
+}
 
 // Password Toggle Helper
 function togglePasswordVisibility(inputId, iconElement) {
@@ -97,6 +129,7 @@ async function handleLogin(event) {
   currentStudentUser = student;
   closeAuthModal();
   updateUIForUser(student);
+  startGlobalSessionGuard();
 }
 
 // Send OTP
@@ -188,6 +221,7 @@ document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) 
   currentStudentUser = student;
   closeAuthModal();
   updateUIForUser(student);
+  startGlobalSessionGuard();
 });
 
 // Google Sign-In
@@ -247,6 +281,7 @@ async function handleOAuthCallback() {
       sessionStorage.setItem('sessionToken', sessionToken);
       currentStudentUser = student;
       updateUIForUser(student);
+      startGlobalSessionGuard();
     }
   }
 }
@@ -319,7 +354,7 @@ function applyFilters() {
   renderCategorizedSections(allSubjectsCache);
 }
 
-// Render Categorized Sections (Filters out 0-page courses & sorts by total pages descending)
+// Render Categorized Sections
 function renderCategorizedSections(subjectsList) {
   const enrolledGrid = document.getElementById('enrolled-courses-list');
   const freeBooksGrid = document.getElementById('free-books-list');
@@ -333,10 +368,8 @@ function renderCategorizedSections(subjectsList) {
   let freeCount = 0;
   let missingCount = 0;
 
-  // 1. Filter out courses with 0 or missing pages
   const validSubjects = subjectsList.filter(subject => Number(subject.total_pages || 0) > 0);
 
-  // 2. Sort remaining subjects by total pages descending
   const sortedSubjects = [...validSubjects].sort((a, b) => (b.total_pages || 0) - (a.total_pages || 0));
 
   sortedSubjects.forEach(subject => {
@@ -488,6 +521,7 @@ function checkSession() {
   if (savedUser) {
     currentStudentUser = JSON.parse(savedUser);
     updateUIForUser(currentStudentUser);
+    startGlobalSessionGuard();
   } else {
     updateUIForUser(null);
     handleOAuthCallback();

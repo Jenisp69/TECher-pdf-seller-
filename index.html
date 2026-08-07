@@ -251,15 +251,33 @@
         <i class="fa-solid fa-arrow-left"></i>
         <span>Back to Portal</span>
       </button>
-      
-      <div class="jump-controls">
-        <input type="number" id="page-jump-input" min="1" placeholder="1">
-        <span id="total-pages-label" style="font-size: 0.8rem; color: var(--text-muted);">/ 0</span>
-        <button id="jump-btn" class="btn-sm">Go</button>
+
+      <!-- Zoom Controls -->
+      <div style="display: flex; gap: 6px; align-items: center;">
+        <button id="zoom-out-btn" class="btn-sm"><i class="fa-solid fa-minus"></i></button>
+        <span id="zoom-label" style="font-size: 0.85rem; padding: 0 4px; color: var(--text-main);">100%</span>
+        <button id="zoom-in-btn" class="btn-sm"><i class="fa-solid fa-plus"></i></button>
       </div>
     </nav>
 
-    <div id="viewer-container" class="container"></div>
+    <!-- Continuous PDF Viewer Container -->
+    <div id="viewer-container"></div>
+
+    <!-- Floating Drawing & Navigation Controls -->
+    <div class="floating-toolbar" id="floating-toolbar">
+      <button id="floating-pen-btn" class="btn-sm">
+        <i class="fa-solid fa-pen"></i>
+        <span id="pen-text">Pen: Off</span>
+      </button>
+      <button id="floating-clear-btn" class="btn-sm">
+        <i class="fa-solid fa-eraser"></i>
+        <span>Clear Page</span>
+      </button>
+      <div class="jump-controls">
+        <input type="number" id="page-jump-input" value="1" min="1" />
+        <span style="font-size: 0.85rem; color: var(--text-muted);">/ <span id="total-pages-count">1</span></span>
+      </div>
+    </div>
   </div>
 
   <script src="config.js"></script>

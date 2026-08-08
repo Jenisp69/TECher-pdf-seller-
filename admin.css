@@ -1,5 +1,5 @@
 /* ==========================================
-   Global Variables & Reset
+   01. Global Variables & Reset
    ========================================== */
 :root {
   --bg-main: #0f172a;
@@ -44,7 +44,7 @@ body {
 }
 
 /* ==========================================
-   Header & Typography
+   02. Header & Typography
    ========================================== */
 .brand-header {
   text-align: center;
@@ -88,7 +88,7 @@ h3 {
 }
 
 /* ==========================================
-   Card Layouts & Forms
+   03. Card Layouts & Forms
    ========================================== */
 .admin-card {
   background: var(--bg-card);
@@ -146,7 +146,6 @@ input:disabled {
   cursor: not-allowed;
 }
 
-/* Dynamic Action Button Control Rows */
 .action-row {
   display: flex;
   flex-wrap: wrap;
@@ -169,7 +168,7 @@ input:disabled {
 }
 
 /* ==========================================
-   Buttons & Upload Layout
+   04. Buttons & Upload Layout
    ========================================== */
 button, .btn {
   display: inline-flex;
@@ -243,7 +242,7 @@ button:hover, .btn:hover {
 }
 
 /* ==========================================
-   Subject Picklist & Cart Components
+   05. Subject Picklist & Cart Components
    ========================================== */
 .subject-picklist,
 .picklist-container {
@@ -339,7 +338,7 @@ button:hover, .btn:hover {
 }
 
 /* ==========================================
-   Utility Classes & Scrollbars
+   06. Utility Classes & Media Queries
    ========================================== */
 .hidden {
   display: none !important;
@@ -356,7 +355,6 @@ button:hover, .btn:hover {
   border-radius: 3px;
 }
 
-/* Screen sizes matching DevTools emulation (iPhone 12 Pro / Mobile) */
 @media (max-width: 480px) {
   .admin-card {
     padding: 14px;

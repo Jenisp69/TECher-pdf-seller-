@@ -32,6 +32,55 @@
   }
 
   /* ==========================================
+     STROKE STORAGE HELPERS
+     ========================================== */
+  function getStrokeStorageKey(pageNum) {
+    return `strokes_${activeSubjectId}_p${pageNum}`;
+  }
+
+  function getSavedStrokes(pageNum) {
+    try {
+      return JSON.parse(localStorage.getItem(getStrokeStorageKey(pageNum)) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveStroke(pageNum, strokeData) {
+    if (!strokeData || strokeData.length < 2) return;
+    const strokes = getSavedStrokes(pageNum);
+    strokes.push(strokeData);
+    localStorage.setItem(getStrokeStorageKey(pageNum), JSON.stringify(strokes));
+  }
+
+  function clearSavedStrokes(pageNum) {
+    localStorage.removeItem(getStrokeStorageKey(pageNum));
+  }
+
+  function redrawSavedStrokes(canvas, pageNum) {
+    const ctx = canvas.getContext('2d');
+    const strokes = getSavedStrokes(pageNum);
+    if (!strokes.length) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    ctx.strokeStyle = '#ff3366';
+    ctx.lineWidth = 3 * dpr;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    strokes.forEach((stroke) => {
+      if (!stroke || stroke.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0].x * canvas.width, stroke[0].y * canvas.height);
+
+      for (let i = 1; i < stroke.length; i++) {
+        ctx.lineTo(stroke[i].x * canvas.width, stroke[i].y * canvas.height);
+      }
+      ctx.stroke();
+    });
+  }
+
+  /* ==========================================
      INITIALIZATION & PDF LOADING
      ========================================== */
   window.initReader = async function (sessionData) {
@@ -209,7 +258,7 @@
       drawCanvas.style.touchAction = isPenActive ? 'none' : 'auto';
 
       wrapper.appendChild(drawCanvas);
-      attachDrawingEvents(drawCanvas);
+      attachDrawingEvents(drawCanvas, pageNum);
 
       // 3. Collapsible Note Tag
       const noteTrigger = document.createElement('button');
@@ -358,19 +407,23 @@
   }
 
   /* ==========================================
-     PEN / DRAWING ENGINE (RAF OPTIMIZED)
+     PEN / DRAWING ENGINE (PERSISTENT & RAF OPTIMIZED)
      ========================================== */
-  function attachDrawingEvents(canvas) {
+  function attachDrawingEvents(canvas, pageNum) {
     const ctx = canvas.getContext('2d');
     let isDrawing = false;
     let rafId = null;
     let lastPoint = null;
+    let currentStroke = [];
 
     const dpr = window.devicePixelRatio || 1;
     ctx.strokeStyle = '#ff3366';
     ctx.lineWidth = 3 * dpr;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+
+    // Render historical strokes
+    redrawSavedStrokes(canvas, pageNum);
 
     function getCoords(e) {
       const rect = canvas.getBoundingClientRect();
@@ -379,16 +432,23 @@
       const scaleX = canvas.width / rect.width;
       const scaleY = canvas.height / rect.height;
 
+      const canvasX = (touch.clientX - rect.left) * scaleX;
+      const canvasY = (touch.clientY - rect.top) * scaleY;
+
       return {
-        x: (touch.clientX - rect.left) * scaleX,
-        y: (touch.clientY - rect.top) * scaleY,
+        x: canvasX,
+        y: canvasY,
+        relX: canvasX / canvas.width,
+        relY: canvasY / canvas.height,
       };
     }
 
     function startDraw(e) {
       if (!isPenActive || (e.touches && e.touches.length > 1)) return;
       isDrawing = true;
-      lastPoint = getCoords(e);
+      const pt = getCoords(e);
+      lastPoint = pt;
+      currentStroke = [{ x: pt.relX, y: pt.relY }];
     }
 
     function draw(e) {
@@ -396,6 +456,7 @@
       if (e.cancelable) e.preventDefault();
 
       const currentPoint = getCoords(e);
+      currentStroke.push({ x: currentPoint.relX, y: currentPoint.relY });
 
       if (rafId) cancelAnimationFrame(rafId);
       rafId = requestAnimationFrame(() => {
@@ -409,8 +470,12 @@
     }
 
     function stopDraw() {
+      if (isDrawing && currentStroke.length > 1) {
+        saveStroke(pageNum, currentStroke);
+      }
       isDrawing = false;
       lastPoint = null;
+      currentStroke = [];
       if (rafId) cancelAnimationFrame(rafId);
     }
 
@@ -459,10 +524,16 @@
     e.stopPropagation();
     const targetPage = getMostVisiblePageElement();
     if (targetPage) {
+      const pageNum = parseInt(targetPage.dataset.pageNum, 10);
       const drawCanvas = targetPage.querySelector('.draw-overlay');
+
       if (drawCanvas) {
         const ctx = drawCanvas.getContext('2d');
         ctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      }
+
+      if (!isNaN(pageNum)) {
+        clearSavedStrokes(pageNum);
       }
     }
     resetToolbarTimeout();
@@ -565,4 +636,4 @@
       viewerContainer.innerHTML = `<p style="color:var(--danger); text-align:center; padding:30px;">⚠️ ${msg}</p>`;
     }
   }
-})();s
+})();

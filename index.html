@@ -17,7 +17,9 @@
   <div class="blob blob-1"></div>
   <div class="blob blob-2"></div>
 
-  <!-- TOP GLASS NAVIGATION -->
+  <!-- ==========================================
+       01. Top Navigation Bar
+       ========================================== -->
   <header class="glass-navbar">
     <div class="nav-container">
       <div class="brand-logo-title" onclick="window.location.reload()">
@@ -43,10 +45,12 @@
     </div>
   </header>
 
-  <!-- MAIN PORTAL SECTION -->
+  <!-- ==========================================
+       02. Main Portal Content
+       ========================================== -->
   <main id="homepage-section" class="main-content container">
     
-    <!-- DYNAMIC HERO BANNER WITH MODERN TEASER BOX -->
+    <!-- Hero Banner with Mission Preview -->
     <section class="hero-card glass-card">
       <div class="hero-body">
         <span class="glass-badge" id="hero-badge"><i class="fa-solid fa-heart"></i> Non-Profit Learning Portal</span>
@@ -56,7 +60,7 @@
           High-yield academic resources powering education for underprivileged children across Nepal.
         </p>
 
-        <!-- MODERN VISUAL MISSION TEASER CARD -->
+        <!-- Mission Teaser Box -->
         <div class="hero-mission-preview">
           <div class="mission-preview-badge">
             <i class="fa-solid fa-hand-holding-heart"></i>
@@ -71,7 +75,7 @@
           </button>
         </div>
 
-        <div class="hero-cta-group" style="margin-top: 20px;">
+        <div class="hero-cta-group">
           <button class="btn-primary-glass" id="hero-cta-btn" onclick="scrollToSection('free-books-section')">
             <i class="fa-solid fa-book-open"></i> Browse Free Books
           </button>
@@ -79,7 +83,7 @@
       </div>
     </section>
 
-    <!-- DYNAMIC HIERARCHY FILTER PILLS BAR -->
+    <!-- Catalog Filter Bar -->
     <section id="catalog-filter-bar" class="section-container">
       <div class="glass-card filter-card">
         <div class="filter-header">
@@ -92,7 +96,7 @@
           <div id="filter-stream-pills" class="pill-group"></div>
         </div>
 
-        <!-- Level 2: Semester Pills (Conditional on Bachelor Streams) -->
+        <!-- Level 2: Semester Pills -->
         <div id="filter-semester-group" class="filter-group hidden">
           <label>Semester:</label>
           <div id="filter-semester-pills" class="pill-group"></div>
@@ -100,7 +104,7 @@
       </div>
     </section>
 
-    <!-- 1. ENROLLED SUBJECTS SECTION -->
+    <!-- Enrolled Courses Section -->
     <section id="enrolled-section" class="section-container hidden">
       <div class="section-header">
         <h2><i class="fa-solid fa-circle-check accent-text"></i> My Enrolled Courses</h2>
@@ -109,7 +113,7 @@
       <div id="enrolled-courses-list" class="course-grid"></div>
     </section>
 
-    <!-- 2. FREE BOOKS SECTION -->
+    <!-- Free Books Section -->
     <section id="free-books-section" class="section-container">
       <div class="section-header">
         <h2><i class="fa-solid fa-book-bookmark accent-text"></i> Free Books & Open Material</h2>
@@ -118,7 +122,7 @@
       <div id="free-books-list" class="course-grid"></div>
     </section>
 
-    <!-- 3. MISSING / UNLOCKED COURSES SECTION -->
+    <!-- Premium Courses Section -->
     <section id="missing-section" class="section-container">
       <div class="section-header">
         <h2><i class="fa-solid fa-lock accent-text"></i> Premium Courses Catalog</h2>
@@ -127,14 +131,7 @@
       <div id="missing-courses-list" class="course-grid"></div>
     </section>
 
-  
-
-
-
-
-
-
-<!-- DYNAMIC MISSION SECTION (BOTTOM TARGET) -->
+    <!-- Dynamic Mission Section -->
     <section id="bottom-mission-section" class="section-container">
       <div class="glass-card mission-card">
         <div class="tab-header">
@@ -155,15 +152,14 @@
       </div>
     </section>
 
-    <!-- NEW: STUDENT FEEDBACK & RATING SECTION -->
-    <section class="section-container">
+    <!-- Student Feedback Section -->
+    <section class="section-container" id="feedback-section">
       <div class="glass-card feedback-card">
-        <div class="section-header" style="margin-bottom: 16px;">
+        <div class="section-header">
           <h2><i class="fa-solid fa-star accent-text"></i> Student Feedback & Reviews</h2>
           <span class="section-subtitle">Help us improve by leaving your rating or reviewing shared notes</span>
         </div>
 
-        <!-- Rating Input Form -->
         <form id="feedback-form" class="feedback-form">
           <div class="star-rating-picker">
             <span class="rating-label">Your Rating:</span>
@@ -176,11 +172,11 @@
             </div>
           </div>
 
-          <div class="form-group" style="margin-top: 12px;">
+          <div class="form-group mt-12">
             <textarea id="feedback-text-input" rows="3" placeholder="Share your thoughts, suggestions, or notes review..." required></textarea>
           </div>
 
-          <button type="submit" class="btn-primary-glass" style="margin-top: 8px;">
+          <button type="submit" class="btn-primary-glass mt-8">
             <i class="fa-solid fa-paper-plane"></i>
             <span>Submit Feedback</span>
           </button>
@@ -188,7 +184,7 @@
       </div>
     </section>
 
-    <!-- TEACHER CONTACT & SOCIALS -->
+    <!-- Teacher Contact & Socials -->
     <section class="section-container">
       <div class="glass-card teacher-socials-card">
         <h3><i class="fa-solid fa-chalkboard-user accent-text"></i> Connect with Teacher</h3>
@@ -213,14 +209,12 @@
       </div>
     </section>
 
-
-
-
-   
-
   </main>
 
-  <!-- AUTHENTICATION MODAL -->
+  <!-- ==========================================
+       03. Modals & Overlays
+       ========================================== -->
+  <!-- Authentication Modal -->
   <div id="auth-modal" class="modal-backdrop hidden">
     <div class="glass-modal">
       <button class="modal-close-btn" onclick="closeAuthModal()">&times;</button>
@@ -239,7 +233,7 @@
       <div id="login-error" class="hidden alert-box error"></div>
       <div id="login-success" class="hidden alert-box success"></div>
 
-      <!-- FORM 1: LOGIN -->
+      <!-- Login Form -->
       <form id="login-form">
         <div class="form-group">
           <label for="username-input">Username / Phone</label>
@@ -264,7 +258,7 @@
         </button>
       </form>
 
-      <!-- FORM 2: SIGNUP -->
+      <!-- Signup Form -->
       <div id="signup-form-container" class="hidden">
         <form id="phone-otp-form">
           <div class="form-group">
@@ -303,7 +297,7 @@
     </div>
   </div>
 
-  <!-- PAYMENT QR MODAL -->
+  <!-- Payment Modal -->
   <div id="payment-modal" class="modal-backdrop hidden">
     <div class="glass-modal payment-modal-content">
       <button class="modal-close-btn" onclick="closePaymentModal()">&times;</button>
@@ -335,7 +329,7 @@
     </div>
   </div>
 
-  <!-- CANVAS READER SCREEN -->
+  <!-- Canvas PDF Reader Section -->
   <div id="reader-section" class="hidden">
     <nav class="reader-nav">
       <button id="back-to-dash-btn" class="btn-sm">
@@ -343,18 +337,15 @@
         <span>Back to Portal</span>
       </button>
 
-      <!-- Zoom Controls -->
-      <div style="display: flex; gap: 6px; align-items: center;">
+      <div class="zoom-controls-wrapper">
         <button id="zoom-out-btn" class="btn-sm"><i class="fa-solid fa-minus"></i></button>
-        <span id="zoom-label" style="font-size: 0.85rem; padding: 0 4px; color: var(--text-main);">100%</span>
+        <span id="zoom-label" class="zoom-label-text">100%</span>
         <button id="zoom-in-btn" class="btn-sm"><i class="fa-solid fa-plus"></i></button>
       </div>
     </nav>
 
-    <!-- Continuous PDF Viewer Container -->
     <div id="viewer-container"></div>
 
-    <!-- Floating Drawing & Navigation Controls -->
     <div class="floating-toolbar" id="floating-toolbar">
       <button id="floating-pen-btn" class="btn-sm">
         <i class="fa-solid fa-pen"></i>
@@ -366,7 +357,7 @@
       </button>
       <div class="jump-controls">
         <input type="number" id="page-jump-input" value="1" min="1" />
-        <span style="font-size: 0.85rem; color: var(--text-muted);">/ <span id="total-pages-count">1</span></span>
+        <span class="page-count-text">/ <span id="total-pages-count">1</span></span>
       </div>
     </div>
   </div>

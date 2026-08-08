@@ -148,6 +148,27 @@ body {
   margin-top: 4px;
 }
 
+/* Section Headings */
+.section-header {
+  margin-bottom: 14px;
+}
+
+.section-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-subtitle {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  display: block;
+  margin-top: 2px;
+}
+
 /* Cards */
 .glass-card {
   background: var(--bg-glass);
@@ -176,7 +197,7 @@ body {
   color: var(--text-muted);
   font-size: 0.95rem;
   line-height: 1.5;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .glass-badge {
@@ -190,6 +211,58 @@ body {
   color: var(--accent);
   font-size: 0.78rem;
   font-weight: 600;
+}
+
+/* Hero Mission Modern Teaser Box */
+.hero-mission-preview {
+  margin: 16px 0;
+  padding: 16px 20px;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-left: 4px solid var(--accent);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mission-preview-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent);
+  font-size: 0.82rem;
+}
+
+.mission-preview-snippet {
+  color: var(--text-muted) !important;
+  font-size: 0.88rem !important;
+  line-height: 1.45 !important;
+  margin: 0 !important;
+  font-style: italic;
+}
+
+.btn-hero-mission {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  margin-top: 4px;
+  transition: var(--transition);
+}
+
+.btn-hero-mission:hover {
+  color: var(--accent);
+  transform: translateX(3px);
 }
 
 /* Course Grid Cards */
@@ -462,12 +535,6 @@ body {
   color: #f59e0b;
 }
 
-.price-value.usd {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: var(--accent);
-}
-
 /* QR Display Guard */
 .qr-container {
   text-align: center;
@@ -608,7 +675,7 @@ canvas {
   max-width: 100vw;
   overflow-x: hidden;
   box-sizing: border-box;
-  touch-action: pan-x pan-y; /* Allows fluid multi-touch scaling */
+  touch-action: pan-x pan-y;
 }
 
 .reader-nav {
@@ -661,9 +728,7 @@ canvas {
   color: #fff;
 }
 
-/* ==========================================
-   Continuous Page Layout (Zero Gap)
-   ========================================== */
+/* Continuous Page Layout (Zero Gap) */
 #viewer-container {
   width: 100%;
   max-width: 100%;
@@ -699,9 +764,7 @@ canvas {
   border-radius: 0;
 }
 
-/* ==========================================
-   Floating Tool Palette (Stays visible on scroll)
-   ========================================== */
+/* Floating Tool Palette */
 .floating-toolbar {
   position: fixed;
   bottom: 20px;
@@ -718,6 +781,13 @@ canvas {
   padding: 8px 16px;
   border-radius: 30px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.floating-toolbar.hidden {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, 20px);
 }
 
 .floating-toolbar .btn-sm {
@@ -725,64 +795,95 @@ canvas {
   padding: 6px 14px;
 }
 
-/* ==========================================
-   Collapsible Note Overlay Tag
-   ========================================== */
-.page-note-trigger {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 20;
-  background: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--border-glass);
+/* Dynamic Filter Pills */
+.filter-card {
+  padding: 18px 24px;
+  margin-bottom: 25px;
+}
+
+.filter-header h3 {
+  font-size: 1.05rem;
+  margin-top: 0;
+  margin-bottom: 12px;
+  color: var(--text-main);
+}
+
+.filter-group {
+  margin-bottom: 12px;
+}
+
+.filter-group:last-child {
+  margin-bottom: 0;
+}
+
+.filter-group label {
+  display: block;
+  font-size: 0.8rem;
   color: var(--text-muted);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.pill-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-muted);
+  padding: 6px 14px;
   border-radius: 20px;
-  padding: 4px 10px;
-  font-size: 0.75rem;
-  cursor: pointer;
-  transition: var(--transition);
-}
-
-.page-note-trigger:hover {
-  background: var(--accent);
-  color: #fff;
-}
-
-.page-note-panel {
-  position: absolute;
-  top: 42px;
-  right: 12px;
-  z-index: 25;
-  width: 260px;
-  background: rgba(15, 23, 42, 0.92);
-  backdrop-filter: blur(12px);
-  border: 1px solid var(--border-glass-light);
-  border-radius: 12px;
-  padding: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-}
-
-.page-note-panel textarea {
-  width: 100%;
-  min-height: 70px;
-  background: var(--bg-input);
-  color: #fff;
-  border: 1px solid var(--border-glass);
-  border-radius: 8px;
-  padding: 8px;
   font-size: 0.82rem;
-  resize: vertical;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-.page-note-panel textarea:focus {
-  outline: none;
-  border-color: var(--accent);
+.pill-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
 }
 
-/* ==========================================
-   Mobile Overrides (Max-width: 768px)
-   ========================================== */
+.pill-btn.active {
+  background: var(--accent, #2563eb);
+  color: #ffffff;
+  border-color: var(--accent, #2563eb);
+  box-shadow: 0 0 10px rgba(37, 99, 235, 0.4);
+}
+
+/* Tabbed Footer Styles */
+.tab-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tab-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.mission-tab-content p {
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.lang-tabs .pill-btn {
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 16px;
+}
+
+/* Mobile Overrides (Max-width: 768px) */
 @media (max-width: 768px) {
   #reader-section,
   #viewer-container {
@@ -807,7 +908,6 @@ canvas {
     display: block;
   }
 
-  /* Compact Floating Toolbar for Mobile */
   .floating-toolbar {
     bottom: 12px;
     padding: 6px 12px;
@@ -816,7 +916,6 @@ canvas {
     max-width: 90%;
   }
 
-  /* Hide button text on mobile; show icons only */
   .floating-toolbar .btn-sm span:not(#total-pages-count) {
     display: none !important;
   }
@@ -829,7 +928,6 @@ canvas {
     justify-content: center;
   }
 
-  /* Active cyan-blue state when pen is ON */
   #floating-pen-btn.active {
     background-color: #06b6d4 !important;
     border-color: #22d3ee !important;
@@ -837,7 +935,6 @@ canvas {
     box-shadow: 0 0 12px rgba(6, 182, 212, 0.6);
   }
 
-  /* Streamline jump controls */
   .jump-controls {
     gap: 4px;
   }
@@ -847,4 +944,61 @@ canvas {
     height: 32px;
     font-size: 0.8rem;
   }
+}
+
+
+/* ==========================================
+   Feedback & Rating Section Styles
+   ========================================== */
+.feedback-card {
+  margin-bottom: 24px;
+}
+
+.feedback-form textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-input);
+  color: var(--text-main);
+  padding: 12px;
+  font-size: 0.9rem;
+  resize: vertical;
+  min-height: 80px;
+}
+
+.feedback-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.star-rating-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.star-rating-picker .rating-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.star-group {
+  display: flex;
+  gap: 6px;
+}
+
+.star-btn {
+  font-size: 1.2rem;
+  color: rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.star-btn:hover,
+.star-btn.active {
+  color: #f59e0b;
+  transform: scale(1.15);
 }

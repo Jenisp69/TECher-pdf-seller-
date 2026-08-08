@@ -24,6 +24,7 @@ async function initAdmin() {
   await fetchStreamsAndSubjects();
   await fetchStudents();
   populateClassDropdowns();
+  await fetchAndRenderFeedback();
 }
 
 function populateClassDropdowns() {
@@ -595,11 +596,22 @@ document.getElementById('account-form')?.addEventListener('submit', async (e) =>
       subject_id: sub.id
     }));
 
-    const { error: enrollError } = await supabaseClient
+    // Fetch existing enrollments first to deduplicate Safely
+    const { data: existingCourses } = await supabaseClient
       .from('student_courses')
-      .upsert(courseMappings, { onConflict: 'student_id,subject_id' });
+      .select('subject_id')
+      .eq('student_id', student.id);
 
-    if (enrollError) throw enrollError;
+    const existingSubjectIds = new Set((existingCourses || []).map(c => c.subject_id));
+    const newEnrollments = courseMappings.filter(m => !existingSubjectIds.has(m.subject_id));
+
+    if (newEnrollments.length > 0) {
+      const { error: enrollError } = await supabaseClient
+        .from('student_courses')
+        .insert(newEnrollments);
+
+      if (enrollError) throw enrollError;
+    }
 
     display.style.color = 'var(--success)';
     display.innerHTML = `✅ Success! Student Enrolled into ${selectedSubjectsCart.length} Subject(s).<br>Username: <b>${username}</b> | Password: <b>${password}</b>`;
@@ -1029,9 +1041,21 @@ async function addSubjectToSelectedStudent() {
     return;
   }
 
+  const { data: existingCourses } = await supabaseClient
+    .from('student_courses')
+    .select('subject_id')
+    .eq('student_id', activeStudentId);
+
+  const existingSubjectIds = new Set((existingCourses || []).map(c => c.subject_id));
+
+  if (existingSubjectIds.has(subjectId)) {
+    alert('Student is already enrolled in this subject.');
+    return;
+  }
+
   const { error } = await supabaseClient
     .from('student_courses')
-    .upsert([{ student_id: activeStudentId, subject_id: subjectId }], { onConflict: 'student_id,subject_id' });
+    .insert([{ student_id: activeStudentId, subject_id: subjectId }]);
 
   if (error) {
     alert(`Error adding subject: ${error.message}`);
@@ -1088,6 +1112,43 @@ async function handleAdminLogin(event) {
     errorDiv.textContent = 'Invalid Admin ID or Password.';
     errorDiv.style.display = 'block';
   }
+}
+
+// Fetch and render feedback list inside the Admin Panel
+async function fetchAndRenderFeedback() {
+  const container = document.getElementById('admin-feedback-list');
+  if (!container) return;
+
+  container.innerHTML = '<p style="color:var(--text-muted);">Loading feedback...</p>';
+
+  const { data: feedbackList, error } = await supabaseClient
+    .from('feedback')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    container.innerHTML = `<p style="color:var(--danger);">Error: ${error.message}</p>`;
+    return;
+  }
+
+  if (!feedbackList || feedbackList.length === 0) {
+    container.innerHTML = '<p style="color:var(--text-muted);">No student feedback submitted yet.</p>';
+    return;
+  }
+
+  container.innerHTML = '';
+  feedbackList.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'picklist-item';
+    div.innerHTML = `
+      <div class="picklist-title">
+        <b>${item.student_name}</b> — <span style="color: #ffc107;">${'★'.repeat(item.rating)}${'☆'.repeat(5 - item.rating)}</span>
+        <p style="margin: 4px 0 0 0; font-size: 0.9rem; color: var(--text-main);">${item.comment}</p>
+        <span class="picklist-tag">${new Date(item.created_at).toLocaleString()}</span>
+      </div>
+    `;
+    container.appendChild(div);
+  });
 }
 
 window.addEventListener('DOMContentLoaded', initAdmin);

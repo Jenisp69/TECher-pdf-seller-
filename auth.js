@@ -33,7 +33,7 @@ function startGlobalSessionGuard() {
     } catch (e) {
       console.warn('Session check warning:', e);
     }
-  }, 15000); // Checks every 15 seconds globally
+  }, 15000);
 }
 
 // Password Toggle Helper
@@ -68,19 +68,19 @@ function switchAuthTab(tab) {
   const errorDiv = document.getElementById('login-error');
   const successDiv = document.getElementById('login-success');
 
-  errorDiv.classList.add('hidden');
-  successDiv.classList.add('hidden');
+  if (errorDiv) errorDiv.classList.add('hidden');
+  if (successDiv) successDiv.classList.add('hidden');
 
   if (tab === 'login') {
-    loginForm.classList.remove('hidden');
-    signupContainer.classList.add('hidden');
-    tabLogin.classList.add('active');
-    tabSignup.classList.remove('active');
+    loginForm?.classList.remove('hidden');
+    signupContainer?.classList.add('hidden');
+    tabLogin?.classList.add('active');
+    tabSignup?.classList.remove('active');
   } else {
-    loginForm.classList.add('hidden');
-    signupContainer.classList.remove('hidden');
-    tabLogin.classList.remove('active');
-    tabSignup.classList.add('active');
+    loginForm?.classList.add('hidden');
+    signupContainer?.classList.remove('hidden');
+    tabLogin?.classList.remove('active');
+    tabSignup?.classList.add('active');
   }
 }
 
@@ -132,159 +132,9 @@ async function handleLogin(event) {
   startGlobalSessionGuard();
 }
 
-// Send OTP
-async function sendOtpCode() {
-  const phone = document.getElementById('signup-phone').value.trim();
-  const errorDiv = document.getElementById('login-error');
-  const successDiv = document.getElementById('login-success');
-
-  if (!phone) {
-    errorDiv.textContent = 'Please enter a valid phone number.';
-    errorDiv.classList.remove('hidden');
-    return;
-  }
-
-  errorDiv.classList.add('hidden');
-  const { error } = await supabaseClient.auth.signInWithOtp({ phone });
-
-  if (error) {
-    errorDiv.textContent = `OTP Error: ${error.message}`;
-    errorDiv.classList.remove('hidden');
-    return;
-  }
-
-  successDiv.textContent = '✅ Verification code sent via SMS.';
-  successDiv.classList.remove('hidden');
-  document.getElementById('otp-group').classList.remove('hidden');
-}
-
-// Complete Sign Up
-document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  
-  const name = document.getElementById('signup-name').value.trim();
-  const phone = document.getElementById('signup-phone').value.trim();
-  const otp = document.getElementById('otp-input').value.trim();
-  const password = document.getElementById('signup-password').value.trim();
-  const confirmPassword = document.getElementById('signup-confirm-password').value.trim();
-  const errorDiv = document.getElementById('login-error');
-
-  errorDiv.classList.add('hidden');
-
-  if (password !== confirmPassword) {
-    errorDiv.textContent = 'Passwords do not match. Please re-enter carefully.';
-    errorDiv.classList.remove('hidden');
-    return;
-  }
-
-  if (otp) {
-    const { error: otpErr } = await supabaseClient.auth.verifyOtp({
-      phone,
-      token: otp,
-      type: 'sms'
-    });
-
-    if (otpErr) {
-      errorDiv.textContent = `Invalid OTP: ${otpErr.message}`;
-      errorDiv.classList.remove('hidden');
-      return;
-    }
-  }
-
-  const generatedUsername = phone.replace(/[^0-9]/g, '');
-  const sessionToken = crypto.randomUUID();
-  
-  const studentPayload = {
-    username: generatedUsername,
-    password,
-    full_name: name,
-    phone_number: phone,
-    active_session_token: sessionToken
-  };
-
-  const { data: student, error: insertError } = await supabaseClient
-    .from('students')
-    .upsert([studentPayload], { onConflict: 'username' })
-    .select()
-    .single();
-
-  if (insertError) {
-    errorDiv.textContent = `Account creation failed: ${insertError.message}`;
-    errorDiv.classList.remove('hidden');
-    return;
-  }
-
-  sessionStorage.setItem('student_user', JSON.stringify(student));
-  sessionStorage.setItem('studentId', student.id);
-  sessionStorage.setItem('sessionToken', sessionToken);
-
-  currentStudentUser = student;
-  closeAuthModal();
-  updateUIForUser(student);
-  startGlobalSessionGuard();
-});
-
-// Google Sign-In
-async function handleGoogleSignIn() {
-  const { error } = await supabaseClient.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.origin }
-  });
-
-  if (error) {
-    const errorDiv = document.getElementById('login-error');
-    errorDiv.textContent = `Google Sign-In Error: ${error.message}`;
-    errorDiv.classList.remove('hidden');
-  }
-}
-
-// Sync OAuth Callback
-async function handleOAuthCallback() {
-  const { data: { session } } = await supabaseClient.auth.getSession();
-  if (session && session.user) {
-    const user = session.user;
-    
-    let { data: student } = await supabaseClient
-      .from('students')
-      .select('*')
-      .eq('username', user.email)
-      .single();
-
-    const sessionToken = crypto.randomUUID();
-
-    if (!student) {
-      const { data: newStudent } = await supabaseClient
-        .from('students')
-        .insert([{
-          username: user.email,
-          password: 'OAuthAccount',
-          full_name: user.user_metadata.full_name || 'Google User',
-          phone_number: user.phone || '',
-          active_session_token: sessionToken
-        }])
-        .select()
-        .single();
-        
-      student = newStudent;
-    } else {
-      await supabaseClient
-        .from('students')
-        .update({ active_session_token: sessionToken })
-        .eq('id', student.id);
-      
-      student.active_session_token = sessionToken;
-    }
-
-    if (student) {
-      sessionStorage.setItem('student_user', JSON.stringify(student));
-      sessionStorage.setItem('studentId', student.id);
-      sessionStorage.setItem('sessionToken', sessionToken);
-      currentStudentUser = student;
-      updateUIForUser(student);
-      startGlobalSessionGuard();
-    }
-  }
-}
+/* ==========================================
+   UI DASHBOARD & COURSE RENDERING
+   ========================================== */
 
 // Master Load Data & Render Dashboard
 async function updateUIForUser(student) {
@@ -306,6 +156,10 @@ async function updateUIForUser(student) {
   const { data: subjects } = await supabaseClient.from('subjects').select('*');
   allSubjectsCache = subjects || [];
 
+  if (window.CatalogFilter) {
+    await window.CatalogFilter.init();
+  }
+
   missingSec?.classList.remove('hidden');
 
   if (student) {
@@ -313,15 +167,16 @@ async function updateUIForUser(student) {
     userProfile?.classList.remove('hidden');
     if (userNameEl) userNameEl.textContent = student.full_name;
 
-    heroBadge.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> Student Dashboard';
-    heroTitle.textContent = `Welcome back, ${student.full_name}!`;
-    heroSubtitle.textContent = 'Manage your enrolled coursework, explore free reading books, or expand your study list.';
-    heroCtaBtn.innerHTML = '<i class="fa-solid fa-circle-play"></i> Jump to Enrolled Subjects';
-    heroCtaBtn.onclick = () => scrollToSection('enrolled-section');
+    if (heroBadge) heroBadge.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> Student Dashboard';
+    if (heroTitle) heroTitle.textContent = `Welcome back, ${student.full_name}!`;
+    if (heroSubtitle) heroSubtitle.textContent = 'Manage your enrolled coursework, explore free reading books, or expand your study list.';
+    if (heroCtaBtn) {
+      heroCtaBtn.innerHTML = '<i class="fa-solid fa-circle-play"></i> Jump to Enrolled Subjects';
+      heroCtaBtn.onclick = () => scrollToSection('enrolled-section');
+    }
 
     enrolledSec?.classList.remove('hidden');
 
-    // Fetch user enrollments
     const { data: enrollments } = await supabaseClient
       .from('student_courses')
       .select('subject_id')
@@ -332,27 +187,28 @@ async function updateUIForUser(student) {
     loginBtn?.classList.remove('hidden');
     userProfile?.classList.add('hidden');
 
-    heroBadge.innerHTML = '<i class="fa-solid fa-book"></i> Public Portal';
-    heroTitle.textContent = 'Master Your Engineering & Academic Studies';
-    heroSubtitle.textContent = 'Access live notes, curated course files, dynamic updates, and high-yield academic resources curated by top faculty.';
-    heroCtaBtn.innerHTML = '<i class="fa-solid fa-book-open"></i> Browse Free Books';
-    heroCtaBtn.onclick = () => scrollToSection('free-books-section');
+    if (heroBadge) heroBadge.innerHTML = '<i class="fa-solid fa-book"></i> Public Portal';
+    if (heroTitle) heroTitle.textContent = 'Master Your Engineering & Academic Studies';
+    if (heroSubtitle) heroSubtitle.textContent = 'Access live notes, curated course files, dynamic updates, and high-yield academic resources curated by top faculty.';
+    if (heroCtaBtn) {
+      heroCtaBtn.innerHTML = '<i class="fa-solid fa-book-open"></i> Browse Free Books';
+      heroCtaBtn.onclick = () => scrollToSection('free-books-section');
+    }
 
     enrolledSec?.classList.add('hidden');
     userEnrollmentsSet.clear();
   }
 
-  // Render valid subjects with page count > 0
-  renderCategorizedSections(allSubjectsCache);
+  applyCatalogFilters();
 }
 
-function populateFilterPills() {
-  return;
-}
-
-function applyFilters() {
-  renderCategorizedSections(allSubjectsCache);
-}
+window.applyCatalogFilters = function() {
+  let filtered = allSubjectsCache;
+  if (window.CatalogFilter) {
+    filtered = window.CatalogFilter.filterSubjects(allSubjectsCache);
+  }
+  renderCategorizedSections(filtered);
+};
 
 // Render Categorized Sections
 function renderCategorizedSections(subjectsList) {
@@ -360,16 +216,15 @@ function renderCategorizedSections(subjectsList) {
   const freeBooksGrid = document.getElementById('free-books-list');
   const missingGrid = document.getElementById('missing-courses-list');
 
-  enrolledGrid.innerHTML = '';
-  freeBooksGrid.innerHTML = '';
-  missingGrid.innerHTML = '';
+  if (enrolledGrid) enrolledGrid.innerHTML = '';
+  if (freeBooksGrid) freeBooksGrid.innerHTML = '';
+  if (missingGrid) missingGrid.innerHTML = '';
 
   let enrolledCount = 0;
   let freeCount = 0;
   let missingCount = 0;
 
   const validSubjects = subjectsList.filter(subject => Number(subject.total_pages || 0) > 0);
-
   const sortedSubjects = [...validSubjects].sort((a, b) => (b.total_pages || 0) - (a.total_pages || 0));
 
   sortedSubjects.forEach(subject => {
@@ -378,34 +233,34 @@ function renderCategorizedSections(subjectsList) {
 
     if (currentStudentUser) {
       if (isEnrolled) {
-        renderCard(subject, enrolledGrid, 'enrolled');
+        if (enrolledGrid) renderCard(subject, enrolledGrid, 'enrolled');
         enrolledCount++;
       } else if (isFree) {
-        renderCard(subject, freeBooksGrid, 'free');
+        if (freeBooksGrid) renderCard(subject, freeBooksGrid, 'free');
         freeCount++;
       } else {
-        renderCard(subject, missingGrid, 'missing');
+        if (missingGrid) renderCard(subject, missingGrid, 'missing');
         missingCount++;
       }
     } else {
       if (isFree) {
-        renderCard(subject, freeBooksGrid, 'guest_free');
+        if (freeBooksGrid) renderCard(subject, freeBooksGrid, 'guest_free');
         freeCount++;
       } else {
-        renderCard(subject, missingGrid, 'guest_premium');
+        if (missingGrid) renderCard(subject, missingGrid, 'guest_premium');
         missingCount++;
       }
     }
   });
 
-  if (currentStudentUser && enrolledCount === 0) {
-    enrolledGrid.innerHTML = '<p class="empty-text">No enrolled subjects available.</p>';
+  if (currentStudentUser && enrolledCount === 0 && enrolledGrid) {
+    enrolledGrid.innerHTML = '<p class="empty-text">No enrolled subjects match your filter selection.</p>';
   }
-  if (freeCount === 0) {
-    freeBooksGrid.innerHTML = '<p class="empty-text">No free books available right now.</p>';
+  if (freeCount === 0 && freeBooksGrid) {
+    freeBooksGrid.innerHTML = '<p class="empty-text">No free books found for this selection.</p>';
   }
-  if (missingCount === 0) {
-    missingGrid.innerHTML = '<p class="empty-text">No additional premium courses found.</p>';
+  if (missingCount === 0 && missingGrid) {
+    missingGrid.innerHTML = '<p class="empty-text">No additional premium courses found for this selection.</p>';
   }
 }
 
@@ -467,12 +322,10 @@ function openPaymentModal(subjectId) {
   if (!subject) return;
 
   activePaymentSubject = subject;
-
   const priceNpr = Number(subject.price_npr || 0);
 
   document.getElementById('pay-subject-title').textContent = `Enroll in ${subject.subject_name}`;
   document.getElementById('pay-price-npr').textContent = `NPR ${priceNpr}`;
-
   document.getElementById('payment-modal').classList.remove('hidden');
 }
 
@@ -524,12 +377,68 @@ function checkSession() {
     startGlobalSessionGuard();
   } else {
     updateUIForUser(null);
-    handleOAuthCallback();
   }
 }
 
-// Event Listeners
+/* ==========================================
+   EVENT LISTENERS
+   ========================================== */
 document.getElementById('login-form')?.addEventListener('submit', handleLogin);
+
+// Direct Sign Up Form Listener
+document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const name = document.getElementById('signup-name').value.trim();
+  const phone = document.getElementById('signup-phone').value.trim();
+  const password = document.getElementById('signup-password').value.trim();
+  const confirmPassword = document.getElementById('signup-confirm-password').value.trim();
+  const errorDiv = document.getElementById('login-error');
+
+  if (errorDiv) errorDiv.classList.add('hidden');
+
+  if (password !== confirmPassword) {
+    if (errorDiv) {
+      errorDiv.textContent = 'Passwords do not match. Please re-enter carefully.';
+      errorDiv.classList.remove('hidden');
+    }
+    return;
+  }
+
+  const generatedUsername = phone.replace(/[^0-9]/g, '');
+  const sessionToken = crypto.randomUUID();
+  
+  const studentPayload = {
+    username: generatedUsername,
+    password,
+    full_name: name,
+    phone_number: phone,
+    active_session_token: sessionToken
+  };
+
+  const { data: student, error: insertError } = await supabaseClient
+    .from('students')
+    .upsert([studentPayload], { onConflict: 'username' })
+    .select()
+    .single();
+
+  if (insertError) {
+    if (errorDiv) {
+      errorDiv.textContent = `Account creation failed: ${insertError.message}`;
+      errorDiv.classList.remove('hidden');
+    }
+    return;
+  }
+
+  sessionStorage.setItem('student_user', JSON.stringify(student));
+  sessionStorage.setItem('studentId', student.id);
+  sessionStorage.setItem('sessionToken', sessionToken);
+
+  currentStudentUser = student;
+  closeAuthModal();
+  updateUIForUser(student);
+  startGlobalSessionGuard();
+});
 
 document.getElementById('dash-logout-btn')?.addEventListener('click', () => {
   sessionStorage.clear();
@@ -543,3 +452,27 @@ document.getElementById('back-to-dash-btn')?.addEventListener('click', () => {
 });
 
 window.addEventListener('DOMContentLoaded', checkSession);
+
+function toggleMissionDrawer() {
+  const drawer = document.getElementById('mission-drawer');
+  if (drawer) drawer.classList.toggle('hidden');
+}
+
+function switchMissionLang(lang) {
+  const enBtn = document.getElementById('tab-btn-en');
+  const neBtn = document.getElementById('tab-btn-ne');
+  const enContent = document.getElementById('mission-content-en');
+  const neContent = document.getElementById('mission-content-ne');
+
+  if (lang === 'en') {
+    enBtn.classList.add('active');
+    neBtn.classList.remove('active');
+    enContent.classList.remove('hidden');
+    neContent.classList.add('hidden');
+  } else {
+    neBtn.classList.add('active');
+    enBtn.classList.remove('active');
+    neContent.classList.remove('hidden');
+    enContent.classList.add('hidden');
+  }
+}

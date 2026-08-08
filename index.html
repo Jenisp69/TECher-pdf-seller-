@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
@@ -47,17 +46,56 @@
   <!-- MAIN PORTAL SECTION -->
   <main id="homepage-section" class="main-content container">
     
-    <!-- DYNAMIC HERO BANNER -->
+    <!-- DYNAMIC HERO BANNER WITH MODERN TEASER BOX -->
     <section class="hero-card glass-card">
       <div class="hero-body">
-        <span class="glass-badge" id="hero-badge"><i class="fa-solid fa-book"></i> Public Portal</span>
+        <span class="glass-badge" id="hero-badge"><i class="fa-solid fa-heart"></i> Non-Profit Learning Portal</span>
         <h1 id="hero-title">Master Your Engineering & Academic Studies</h1>
-        <p id="hero-subtitle">Access live notes, curated course files, dynamic updates, and high-yield academic resources curated by top faculty.</p>
         
-        <div class="hero-cta-group">
+        <p id="hero-subtitle">
+          High-yield academic resources powering education for underprivileged children across Nepal.
+        </p>
+
+        <!-- MODERN VISUAL MISSION TEASER CARD -->
+        <div class="hero-mission-preview">
+          <div class="mission-preview-badge">
+            <i class="fa-solid fa-hand-holding-heart"></i>
+            <span><strong>100%</strong> Proceeds Dedicated to Student Schooling</span>
+          </div>
+          <p class="mission-preview-snippet">
+            "Every study resource you access helps build a child's future. Proceeds directly fund tuition, uniforms, and books for needy students..."
+          </p>
+          <button type="button" class="btn-hero-mission" onclick="scrollToSection('bottom-mission-section')">
+            <span>View Full Statement</span>
+            <i class="fa-solid fa-arrow-down-long"></i>
+          </button>
+        </div>
+
+        <div class="hero-cta-group" style="margin-top: 20px;">
           <button class="btn-primary-glass" id="hero-cta-btn" onclick="scrollToSection('free-books-section')">
             <i class="fa-solid fa-book-open"></i> Browse Free Books
           </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DYNAMIC HIERARCHY FILTER PILLS BAR -->
+    <section id="catalog-filter-bar" class="section-container">
+      <div class="glass-card filter-card">
+        <div class="filter-header">
+          <h3><i class="fa-solid fa-filter accent-text"></i> Filter Course Catalog</h3>
+        </div>
+
+        <!-- Level 1: Stream / Faculty Pills -->
+        <div id="filter-stream-group" class="filter-group">
+          <label>Faculty / Stream:</label>
+          <div id="filter-stream-pills" class="pill-group"></div>
+        </div>
+
+        <!-- Level 2: Semester Pills (Conditional on Bachelor Streams) -->
+        <div id="filter-semester-group" class="filter-group hidden">
+          <label>Semester:</label>
+          <div id="filter-semester-pills" class="pill-group"></div>
         </div>
       </div>
     </section>
@@ -89,6 +127,86 @@
       <div id="missing-courses-list" class="course-grid"></div>
     </section>
 
+    <!-- DYNAMIC MISSION SECTION (BOTTOM TARGET) -->
+    <section id="bottom-mission-section" class="section-container">
+      <div class="glass-card mission-card">
+        <div class="tab-header">
+          <h3><i class="fa-solid fa-hand-holding-heart accent-text"></i> Our Purpose & Mission</h3>
+          <div class="lang-tabs">
+            <button class="pill-btn active" id="tab-btn-en" onclick="switchMissionLang('en')">English</button>
+            <button class="pill-btn" id="tab-btn-ne" onclick="switchMissionLang('ne')">नेपाली</button>
+          </div>
+        </div>
+
+        <div id="mission-content-en" class="mission-tab-content">
+          <p>Welcome to our non-profit learning portal, where every study resource you access helps build a child's future. Our primary goal is to provide high-quality, well-structured secular class notes and free reference books for students to excel in their studies. However, this platform is built with a purpose far bigger than just sharing notes. 100% of the proceeds generated from sales on this website are directly dedicated to funding the education of underprivileged children. Many bright young minds are forced to drop out or miss school simply because their families cannot afford tuition, uniforms, or basic stationery. By purchasing our notes or utilizing our resources, you are not just studying for your own exams—you are directly sponsoring a needy child's dream to get educated. Together, we can break the cycle of poverty through the power of education, turning every page you read into hope for someone else.</p>
+        </div>
+
+        <div id="mission-content-ne" class="mission-tab-content hidden">
+          <p>हाम्रो गैर-नाफामूलक (non-profit) सिकाइ पोर्टलमा यहाँहरूलाई स्वागत छ, जहाँ तपाईँले प्रयोग गर्ने प्रत्येक अध्ययन सामग्रीले एउटा बच्चाको भविष्य निर्माण गर्न मद्दत गर्दछ। हाम्रो मुख्य उद्देश्य विद्यार्थीहरूलाई उनीहरूको पढाइमा उत्कृष्ट बनाउनका लागि उच्च गुणस्तरीय, व्यवस्थित नोट्स र नि:शुल्क सन्दर्भ पुस्तकहरू उपलब्ध गराउनु हो। यद्यपि, यो प्लेटफर्म केवल नोट्स सेयर गर्नका लागि मात्र नभई योभन्दा धेरै ठूलो उद्देश्यका साथ निर्माण गरिएको हो। यस वेबसाइटमा हुने बिक्रीबाट प्राप्त हुने १००% रकम प्रत्यक्ष रूपमा विपन्न तथा असहाय बालबालिकाको शिक्षाका लागि समर्पित गरिन्छ। धेरै होसियार र तीक्ष्ण दिमाग भएका बालबालिकाहरू पनि केवल आफ्नो परिवारले ट्युसन शुल्क, पोसाक वा आधारभूत कापी-कलम खरिद गर्न नसकेका कारण विद्यालय छाड्न वा पढाइबाट बञ्चित हुन बाध्य छन्। हाम्रा नोट्सहरू खरिद गरेर वा यहाँका सामग्रीहरू प्रयोग गरेर तपाईँले केवल आफ्नो परीक्षाको लागि मात्र पढिरहनुभएको छैन—तपाईँले सोझै एउटा अभावमा परेको बच्चाको पढ्ने सपनालाई साकार पार्न सहयोग गरिरहनुभएको छ। शिक्षाको शक्तिमार्फत गरिबीको चक्रलाई तोड्दै, हामी सबै मिलेर तपाईँले पढ्ने प्रत्येक पानालाई कसैको लागि आशाको किरणमा बदल्न सक्छौँ।</p>
+        </div>
+      </div>
+    </section>
+
+
+
+
+
+
+<!-- DYNAMIC MISSION SECTION (BOTTOM TARGET) -->
+    <section id="bottom-mission-section" class="section-container">
+      <div class="glass-card mission-card">
+        <div class="tab-header">
+          <h3><i class="fa-solid fa-hand-holding-heart accent-text"></i> Our Purpose & Mission</h3>
+          <div class="lang-tabs">
+            <button class="pill-btn active" id="tab-btn-en" onclick="switchMissionLang('en')">English</button>
+            <button class="pill-btn" id="tab-btn-ne" onclick="switchMissionLang('ne')">नेपाली</button>
+          </div>
+        </div>
+
+        <div id="mission-content-en" class="mission-tab-content">
+          <p>Welcome to our non-profit learning portal, where every study resource you access helps build a child's future. Our primary goal is to provide high-quality, well-structured secular class notes and free reference books for students to excel in their studies. However, this platform is built with a purpose far bigger than just sharing notes. 100% of the proceeds generated from sales on this website are directly dedicated to funding the education of underprivileged children. Many bright young minds are forced to drop out or miss school simply because their families cannot afford tuition, uniforms, or basic stationery. By purchasing our notes or utilizing our resources, you are not just studying for your own exams—you are directly sponsoring a needy child's dream to get educated. Together, we can break the cycle of poverty through the power of education, turning every page you read into hope for someone else.</p>
+        </div>
+
+        <div id="mission-content-ne" class="mission-tab-content hidden">
+          <p>हाम्रो गैर-नाफामूलक (non-profit) सिकाइ पोर्टलमा यहाँहरूलाई स्वागत छ, जहाँ तपाईँले प्रयोग गर्ने प्रत्येक अध्ययन सामग्रीले एउटा बच्चाको भविष्य निर्माण गर्न मद्दत गर्दछ। हाम्रो मुख्य उद्देश्य विद्यार्थीहरूलाई उनीहरूको पढाइमा उत्कृष्ट बनाउनका लागि उच्च गुणस्तरीय, व्यवस्थित नोट्स र नि:शुल्क सन्दर्भ पुस्तकहरू उपलब्ध गराउनु हो। यद्यपि, यो प्लेटफर्म केवल नोट्स सेयर गर्नका लागि मात्र नभई योभन्दा धेरै ठूलो उद्देश्यका साथ निर्माण गरिएको हो। यस वेबसाइटमा हुने बिक्रीबाट प्राप्त हुने १००% रकम प्रत्यक्ष रूपमा विपन्न तथा असहाय बालबालिकाको शिक्षाका लागि समर्पित गरिन्छ। धेरै होसियार र तीक्ष्ण दिमाग भएका बालबालिकाहरू पनि केवल आफ्नो परिवारले ट्युसन शुल्क, पोसाक वा आधारभूत कापी-कलम खरिद गर्न नसकेका कारण विद्यालय छाड्न वा पढाइबाट बञ्चित हुन बाध्य छन्। हाम्रा नोट्सहरू खरिद गरेर वा यहाँका सामग्रीहरू प्रयोग गरेर तपाईँले केवल आफ्नो परीक्षाको लागि मात्र पढिरहनुभएको छैन—तपाईँले सोझै एउटा अभावमा परेको बच्चाको पढ्ने सपनालाई साकार पार्न सहयोग गरिरहनुभएको छ। शिक्षाको शक्तिमार्फत गरिबीको चक्रलाई तोड्दै, हामी सबै मिलेर तपाईँले पढ्ने प्रत्येक पानालाई कसैको लागि आशाको किरणमा बदल्न सक्छौँ।</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- NEW: STUDENT FEEDBACK & RATING SECTION -->
+    <section class="section-container">
+      <div class="glass-card feedback-card">
+        <div class="section-header" style="margin-bottom: 16px;">
+          <h2><i class="fa-solid fa-star accent-text"></i> Student Feedback & Reviews</h2>
+          <span class="section-subtitle">Help us improve by leaving your rating or reviewing shared notes</span>
+        </div>
+
+        <!-- Rating Input Form -->
+        <form id="feedback-form" class="feedback-form">
+          <div class="star-rating-picker">
+            <span class="rating-label">Your Rating:</span>
+            <div class="star-group">
+              <i class="fa-solid fa-star star-btn" data-value="1"></i>
+              <i class="fa-solid fa-star star-btn" data-value="2"></i>
+              <i class="fa-solid fa-star star-btn" data-value="3"></i>
+              <i class="fa-solid fa-star star-btn" data-value="4"></i>
+              <i class="fa-solid fa-star star-btn active" data-value="5"></i>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 12px;">
+            <textarea id="feedback-text-input" rows="3" placeholder="Share your thoughts, suggestions, or notes review..." required></textarea>
+          </div>
+
+          <button type="submit" class="btn-primary-glass" style="margin-top: 8px;">
+            <i class="fa-solid fa-paper-plane"></i>
+            <span>Submit Feedback</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
     <!-- TEACHER CONTACT & SOCIALS -->
     <section class="section-container">
       <div class="glass-card teacher-socials-card">
@@ -114,9 +232,14 @@
       </div>
     </section>
 
+
+
+
+   
+
   </main>
 
-  <!-- FIXED AUTHENTICATION MODAL -->
+  <!-- AUTHENTICATION MODAL -->
   <div id="auth-modal" class="modal-backdrop hidden">
     <div class="glass-modal">
       <button class="modal-close-btn" onclick="closeAuthModal()">&times;</button>
@@ -162,13 +285,6 @@
 
       <!-- FORM 2: SIGNUP -->
       <div id="signup-form-container" class="hidden">
-        <button type="button" class="btn-google" onclick="handleGoogleSignIn()">
-          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.2 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 10.8 0 12.3s.7 2.6 1.9 5l3.7-2.5z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.2-6.4-5.2L1.9 16C3.7 19.7 7.5 23 12 23z"/></svg>
-          <span>Continue with Google</span>
-        </button>
-
-        <div class="divider"><span>OR REGISTER WITH PHONE</span></div>
-
         <form id="phone-otp-form">
           <div class="form-group">
             <label for="signup-name">Full Name</label>
@@ -179,13 +295,7 @@
             <label for="signup-phone">Phone Number</label>
             <div class="input-wrapper">
               <input type="tel" id="signup-phone" placeholder="98XXXXXXXX" required>
-              <button type="button" id="send-otp-btn" class="btn-inline" onclick="sendOtpCode()">Send OTP</button>
             </div>
-          </div>
-
-          <div id="otp-group" class="form-group hidden">
-            <label for="otp-input">Verification Code</label>
-            <input type="text" id="otp-input" placeholder="Enter 6-digit OTP">
           </div>
 
           <div class="form-group">
@@ -205,7 +315,7 @@
           </div>
 
           <button type="submit" id="complete-signup-btn" class="btn-primary-glass">
-            <span>Verify & Create Account</span>
+            <span>Create Account</span>
           </button>
         </form>
       </div>
@@ -281,7 +391,9 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="filter.js"></script>
   <script src="auth.js"></script>
   <script src="pdf-viewer.js"></script>
+  <script src="feedback.js"></script>
 </body>
 </html>

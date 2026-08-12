@@ -152,15 +152,29 @@ async function updateUIForUser(student) {
   const enrolledSec = document.getElementById('enrolled-section');
   const missingSec = document.getElementById('missing-section');
 
-  // Fetch complete catalog
-  const { data: subjects } = await supabaseClient.from('subjects').select('*');
-  allSubjectsCache = subjects || [];
+  missingSec?.classList.remove('hidden');
+
+  // Parallelize initial fetch calls to eliminate network waterfalls
+  const fetchPromises = [
+    supabaseClient.from('subjects').select('*')
+  ];
 
   if (window.CatalogFilter) {
-    await window.CatalogFilter.init();
+    fetchPromises.push(window.CatalogFilter.init());
   }
 
-  missingSec?.classList.remove('hidden');
+  if (student) {
+    fetchPromises.push(
+      supabaseClient
+        .from('student_courses')
+        .select('subject_id')
+        .eq('student_id', student.id)
+    );
+  }
+
+  const results = await Promise.all(fetchPromises);
+  const subjectsRes = results[0];
+  allSubjectsCache = subjectsRes?.data || [];
 
   if (student) {
     loginBtn?.classList.add('hidden');
@@ -177,12 +191,8 @@ async function updateUIForUser(student) {
 
     enrolledSec?.classList.remove('hidden');
 
-    const { data: enrollments } = await supabaseClient
-      .from('student_courses')
-      .select('subject_id')
-      .eq('student_id', student.id);
-
-    userEnrollmentsSet = new Set((enrollments || []).map(e => e.subject_id));
+    const enrollmentsRes = results[results.length - 1];
+    userEnrollmentsSet = new Set((enrollmentsRes?.data || []).map(e => e.subject_id));
   } else {
     loginBtn?.classList.remove('hidden');
     userProfile?.classList.add('hidden');
@@ -210,7 +220,7 @@ window.applyCatalogFilters = function() {
   renderCategorizedSections(filtered);
 };
 
-// Render Categorized Sections
+// Render Categorized Sections using DocumentFragments for high performance
 function renderCategorizedSections(subjectsList) {
   const enrolledGrid = document.getElementById('enrolled-courses-list');
   const freeBooksGrid = document.getElementById('free-books-list');
@@ -219,6 +229,10 @@ function renderCategorizedSections(subjectsList) {
   if (enrolledGrid) enrolledGrid.innerHTML = '';
   if (freeBooksGrid) freeBooksGrid.innerHTML = '';
   if (missingGrid) missingGrid.innerHTML = '';
+
+  const fragEnrolled = document.createDocumentFragment();
+  const fragFree = document.createDocumentFragment();
+  const fragMissing = document.createDocumentFragment();
 
   let enrolledCount = 0;
   let freeCount = 0;
@@ -232,35 +246,54 @@ function renderCategorizedSections(subjectsList) {
     const isEnrolled = userEnrollmentsSet.has(subject.id);
 
     if (currentStudentUser) {
+      // 1. If enrolled, show in Enrolled section
       if (isEnrolled) {
-        if (enrolledGrid) renderCard(subject, enrolledGrid, 'enrolled');
+        renderCard(subject, fragEnrolled, 'enrolled');
         enrolledCount++;
-      } else if (isFree) {
-        if (freeBooksGrid) renderCard(subject, freeBooksGrid, 'free');
+      }
+      
+      // 2. If free, also show in Free Books section (even if enrolled)
+      if (isFree) {
+        renderCard(subject, fragFree, 'free');
         freeCount++;
-      } else {
-        if (missingGrid) renderCard(subject, missingGrid, 'missing');
+      } else if (!isEnrolled) {
+        // 3. Otherwise, if paid and not enrolled, show in Premium/Missing section
+        renderCard(subject, fragMissing, 'missing');
         missingCount++;
       }
     } else {
       if (isFree) {
-        if (freeBooksGrid) renderCard(subject, freeBooksGrid, 'guest_free');
+        renderCard(subject, fragFree, 'guest_free');
         freeCount++;
       } else {
-        if (missingGrid) renderCard(subject, missingGrid, 'guest_premium');
+        renderCard(subject, fragMissing, 'guest_premium');
         missingCount++;
       }
     }
   });
 
-  if (currentStudentUser && enrolledCount === 0 && enrolledGrid) {
-    enrolledGrid.innerHTML = '<p class="empty-text">No enrolled subjects match your filter selection.</p>';
+  if (enrolledGrid) {
+    if (currentStudentUser && enrolledCount === 0) {
+      enrolledGrid.innerHTML = '<p class="empty-text">No enrolled subjects match your filter selection.</p>';
+    } else {
+      enrolledGrid.appendChild(fragEnrolled);
+    }
   }
-  if (freeCount === 0 && freeBooksGrid) {
-    freeBooksGrid.innerHTML = '<p class="empty-text">No free books found for this selection.</p>';
+
+  if (freeBooksGrid) {
+    if (freeCount === 0) {
+      freeBooksGrid.innerHTML = '<p class="empty-text">No free books found for this selection.</p>';
+    } else {
+      freeBooksGrid.appendChild(fragFree);
+    }
   }
-  if (missingCount === 0 && missingGrid) {
-    missingGrid.innerHTML = '<p class="empty-text">No additional premium courses found for this selection.</p>';
+
+  if (missingGrid) {
+    if (missingCount === 0) {
+      missingGrid.innerHTML = '<p class="empty-text">No additional premium courses found for this selection.</p>';
+    } else {
+      missingGrid.appendChild(fragMissing);
+    }
   }
 }
 

@@ -331,23 +331,57 @@ body {
   border-radius: 16px;
 }
 
+/* Mission Split View Layout */
+.mission-split-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.mission-divider {
+  display: none;
+}
+
 /* ==========================================
-   05. Dynamic Filter Bar & Pills
+   05. Dynamic Filter Bar & Pills (Sleek Professional)
    ========================================== */
+
 .filter-card {
-  padding: 18px 24px;
-  margin-bottom: 25px;
+  padding: 12px 16px; /* Reduced vertical padding */
+  margin-bottom: 0px;
+  background: var(--bg-glass);
+  border-radius: 16px;
+  border: 1px solid var(--border-glass);
+}
+
+.filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px; /* Reduced space below header */
 }
 
 .filter-header h3 {
-  font-size: 1.05rem;
-  margin-top: 0;
-  margin-bottom: 12px;
-  color: var(--text-main);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.filter-header h3 i {
+  font-size: 0.8rem;
 }
 
 .filter-group {
-  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 3px; /* Reduced gap between rows */
 }
 
 .filter-group:last-child {
@@ -355,104 +389,230 @@ body {
 }
 
 .filter-group label {
-  display: block;
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin-bottom: 6px;
+  font-size: 0.72rem;
   font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+  min-width: 95px;
+  margin-bottom: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
+/* Horizontal Scrollable Container for Seamless Mobile & PC Experience */
 .pill-group {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding-bottom: 2px;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  /* Hide scrollbar for clean UI */
+  scrollbar-width: none; 
+}
+
+.pill-group::-webkit-scrollbar {
+  display: none;
 }
 
 .pill-btn {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--text-muted);
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 0.82rem;
+  padding: 4px 10px; /* Reduced pill padding */
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .pill-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .pill-btn.active {
   background: var(--accent);
   color: #ffffff;
   border-color: var(--accent);
-  box-shadow: 0 0 10px rgba(59, 130, 246, 0.4);
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.25);
 }
 
+/* Responsive Overrides for Mobile Viewports */
+@media (max-width: 768px) {
+  .filter-card {
+    padding: 10px 12px;
+    margin-bottom: 1px;
+    border-radius: 12px;
+  }
+
+  .filter-header {
+    margin-bottom: 5px;
+  }
+
+  .filter-group {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    margin-bottom: 5px;
+  }
+
+  .filter-group label {
+    font-size: 0.68rem;
+    min-width: auto;
+  }
+
+  .pill-group {
+    width: 100%;
+    padding-bottom: 1px;
+  }
+
+  .pill-btn {
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    border-radius: 6px;
+  }
+}
 /* ==========================================
-   06. Course Grid & Action Cards
+   06. Section Containers & Visual Dividers
+   ========================================== */
+.section-container {
+  position: relative;
+  margin-bottom: 2.5rem;
+}
+
+/* Glassmorphic Divider Line between sections */
+.section-container:not(:first-of-type)::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.15) 20%,
+    rgba(255, 255, 255, 0.15) 80%,
+    transparent 100%
+  );
+  margin-top: -1rem;
+  margin-bottom: 2rem;
+}
+
+/* Category Accent Header Titles */
+.section-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.section-header-enrolled h2 { color: #60a5fa !important; }
+.section-header-free h2 { color: #34d399 !important; }
+.section-header-premium h2 { color: #fbbf24 !important; }
+
+/* ==========================================
+   Course Grid & Tiered Action Cards
    ========================================== */
 .course-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
 }
 
 .course-card {
+  position: relative;
   background: var(--bg-glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--border-glass);
   border-radius: 16px;
-  padding: 18px;
+  padding: 20px;
   cursor: pointer;
-  margin-top: 10px;
-  transition: var(--transition);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  overflow: hidden;
 }
 
-.course-card:hover {
-  transform: translateY(-3px);
+/* Card Visual Accent Themes by Tier */
+#enrolled-courses-list .course-card {
+  border-left: 4px solid var(--accent);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, var(--bg-glass) 100%);
+}
+
+#enrolled-courses-list .course-card:hover {
+  transform: translateY(-4px);
   border-color: var(--accent);
-  box-shadow: 0 10px 25px -5px var(--accent-glow);
-  background: var(--bg-glass-hover);
+  box-shadow: 0 12px 30px -8px rgba(59, 130, 246, 0.35);
+}
+
+#free-books-list .course-card {
+  border-left: 4px solid var(--success);
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, var(--bg-glass) 100%);
+}
+
+#free-books-list .course-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--success);
+  box-shadow: 0 12px 30px -8px rgba(16, 185, 129, 0.35);
+}
+
+#missing-courses-list .course-card {
+  border-left: 4px solid #f59e0b;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, var(--bg-glass) 100%);
+}
+
+#missing-courses-list .course-card:hover {
+  transform: translateY(-4px);
+  border-color: #f59e0b;
+  box-shadow: 0 12px 30px -8px rgba(245, 158, 11, 0.35);
 }
 
 .course-header-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: 12px;
   margin-bottom: 8px;
 }
 
 .course-title {
   font-size: 1.05rem;
   font-weight: 700;
-  color: #fff;
+  color: #ffffff;
+  line-height: 1.35;
 }
 
 .course-meta {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
+/* Buttons for Course Actions */
 .btn-card-action {
   width: 100%;
-  padding: 10px;
+  padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--accent);
   background: rgba(59, 130, 246, 0.2);
-  color: #fff;
+  color: #ffffff;
   font-weight: 600;
+  font-size: 0.9rem;
   cursor: pointer;
   transition: var(--transition);
   display: flex;
@@ -961,8 +1121,37 @@ canvas {
 }
 
 /* ==========================================
-   12. Media Queries & Mobile Responsive
+   12. Media Queries & Desktop / Mobile Responsive
    ========================================== */
+@media (min-width: 769px) {
+  /* Hide language toggle buttons on PC */
+  .mission-card .lang-tabs {
+    display: none !important;
+  }
+
+  /* Display content side-by-side */
+  .mission-split-container {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 2rem;
+  }
+
+  /* Force both content blocks to show regardless of JS hidden state */
+  .mission-split-container .mission-tab-content {
+    display: block !important;
+    flex: 1;
+  }
+
+  /* Vertical divider line between English and Nepali text */
+  .mission-divider {
+    display: block;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.2);
+    align-self: stretch;
+  }
+}
+
 @media (max-width: 768px) {
   #reader-section,
   #viewer-container {

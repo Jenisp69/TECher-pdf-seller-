@@ -1129,7 +1129,7 @@ async function fetchAndRenderFeedback() {
   if (error) {
     container.innerHTML = `<p style="color:var(--danger);">Error: ${error.message}</p>`;
     return;
-  }
+  } 
 
   if (!feedbackList || feedbackList.length === 0) {
     container.innerHTML = '<p style="color:var(--text-muted);">No student feedback submitted yet.</p>';

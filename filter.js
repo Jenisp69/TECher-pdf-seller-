@@ -1,5 +1,5 @@
 /* ==========================================
-   DYNAMIC FILTER HIERARCHY MANAGER
+   DYNAMIC FILTER HIERARCHY MANAGER & UTILS
    ========================================== */
 
 const CatalogFilter = (() => {
@@ -119,6 +119,34 @@ const CatalogFilter = (() => {
   };
 })();
 
+// Mobile Language Switching Function for Mission Section
+function switchMissionLang(lang) {
+  const contentEn = document.getElementById('mission-content-en');
+  const contentNe = document.getElementById('mission-content-ne');
+  const btnEn = document.getElementById('tab-btn-en');
+  const btnNe = document.getElementById('tab-btn-ne');
+
+  if (lang === 'en') {
+    contentEn?.classList.remove('hidden');
+    contentNe?.classList.add('hidden');
+    btnEn?.classList.add('active');
+    btnNe?.classList.remove('active');
+  } else {
+    contentNe?.classList.remove('hidden');
+    contentEn?.classList.add('hidden');
+    btnNe?.classList.add('active');
+    btnEn?.classList.remove('active');
+  }
+}
+
+// Smooth scrolling utility
+function scrollToSection(sectionId) {
+  const el = document.getElementById(sectionId);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 // Listen for broadcast events across tabs to update filters live
 window.addEventListener('storage', (e) => {
   if (e.key === 'catalog_updated') {
@@ -127,5 +155,5 @@ window.addEventListener('storage', (e) => {
 });
 
 window.CatalogFilter = CatalogFilter;
-
-
+window.switchMissionLang = switchMissionLang;
+window.scrollToSection = scrollToSection;

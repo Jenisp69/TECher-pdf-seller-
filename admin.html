@@ -254,72 +254,73 @@
       </div>
     </div>
 
-    <!-- CARD 4: STUDENT MANAGEMENT PANEL -->
-    <div class="admin-card" id="student-management-section">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="margin: 0;">👥 Student Course & Notes Management</h2>
-      </div>
-      
-      <div class="form-group" style="margin-top: 15px;">
-        <label for="manage-student-select">Select Student</label>
-        <select id="manage-student-select" onchange="handleStudentSelectChange()">
-          <option value="">-- Loading Students... --</option>
-        </select>
-      </div>
+  <!-- CARD 4: STUDENT MANAGEMENT PANEL -->
+<div class="admin-card" id="student-management-section">
+  <div style="display: flex; justify-content: space-between; align-items: center;">
+    <h2 style="margin: 0;">👥 Student Course & Notes Management</h2>
+  </div>
+  
+  <div class="form-group" style="margin-top: 15px;">
+    <label for="manage-student-select">Select Student</label>
+    <select id="manage-student-select" onchange="handleStudentSelectChange()">
+      <option value="">-- Loading Students... --</option>
+    </select>
+  </div>
 
-      <div id="student-details-container" class="hidden">
-        <hr style="border: 0; border-top: 1px solid var(--border); margin: 15px 0;">
-        
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
-          <h3 style="font-size: 1rem; margin: 0;">Enrolled Subjects for <span id="display-student-name" style="color: var(--primary);"></span></h3>
-          <button type="button" onclick="deleteStudentAccount()" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 600; width: auto;">
-            🗑️ Delete Student Account
-          </button>
-        </div>
-        
-        <div id="student-enrolled-list" class="picklist-container" style="margin-bottom: 20px;"></div>
+  <div id="student-details-container" class="hidden">
+    <hr style="border: 0; border-top: 1px solid var(--border); margin: 15px 0;">
+    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+      <h3 style="font-size: 1rem; margin: 0;">Enrolled Subjects for <span id="display-student-name" style="color: var(--primary);"></span></h3>
+      <button type="button" onclick="deleteStudentAccount()" style="background: #dc3545; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; font-weight: 600; width: auto;">
+        🗑️ Delete Student Account
+      </button>
+    </div>
+    
+    <div id="student-enrolled-list" class="picklist-container" style="margin-bottom: 20px;"></div>
 
-        <h3 style="font-size: 1rem; margin-bottom: 10px;">➕ Enroll into Additional Subject</h3>
-        
-        <div class="form-group">
-          <label>1. Select Level / Class</label>
-          <select id="add-sub-class" onchange="handleManageClassChange()">
-            <option value="">-- Select Class --</option>
-          </select>
-        </div>
+    <h3 style="font-size: 1rem; margin-bottom: 10px;">➕ Enroll into Additional Subject</h3>
+    
+    <div class="form-group">
+      <label>1. Select Level / Class</label>
+      <select id="add-sub-class" onchange="handleManageClassChange()">
+        <option value="">-- Select Class --</option>
+      </select>
+    </div>
 
-        <div class="form-group">
-          <label>2. Select Stream / Faculty</label>
-          <select id="add-sub-stream" onchange="handleManageStreamChange()" disabled>
-            <option value="">-- Select Level First --</option>
-          </select>
-        </div>
+    <div class="form-group">
+      <label>2. Select Stream / Faculty</label>
+      <select id="add-sub-stream" onchange="handleManageStreamChange()" disabled>
+        <option value="">-- Select Level First --</option>
+      </select>
+    </div>
 
-        <div class="form-group hidden" id="add-sub-sem-group">
-          <label>3. Select Semester</label>
-          <select id="add-sub-semester" onchange="loadAddableSubjects()">
-            <option value="">-- Select Semester --</option>
-            <option value="1st">1st Semester</option>
-            <option value="2nd">2nd Semester</option>
-            <option value="3rd">3rd Semester</option>
-            <option value="4th">4th Semester</option>
-            <option value="5th">5th Semester</option>
-            <option value="6th">6th Semester</option>
-            <option value="7th">7th Semester</option>
-            <option value="8th">8th Semester</option>
-          </select>
-        </div>
+    <div class="form-group hidden" id="add-sub-sem-group">
+      <label>3. Select Semester</label>
+      <select id="add-sub-semester" onchange="loadAddableSubjects()">
+        <option value="">-- Select Semester --</option>
+        <option value="1st">1st Semester</option>
+        <option value="2nd">2nd Semester</option>
+        <option value="3rd">3rd Semester</option>
+        <option value="4th">4th Semester</option>
+        <option value="5th">5th Semester</option>
+        <option value="6th">6th Semester</option>
+        <option value="7th">7th Semester</option>
+        <option value="8th">8th Semester</option>
+      </select>
+    </div>
 
-        <div class="form-group">
-          <label>4. Select Subject</label>
-          <select id="add-sub-subject" disabled>
-            <option value="">-- Select Hierarchy First --</option>
-          </select>
-        </div>
-
-        <button type="button" class="btn" onclick="addSubjectToSelectedStudent()">+ Add Subject to Student</button>
+    <!-- REPLACED DROPDOWN WITH PICKLIST CONTAINER -->
+    <div class="form-group">
+      <label>Available Subjects to Add</label>
+      <div id="add-sub-picklist" class="picklist-container">
+        <p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">
+          Select Level and Stream above to list subjects.
+        </p>
       </div>
     </div>
+  </div>
+</div>
 
 
 <!-- CARD 5: STUDENT FEEDBACK & REVIEWS -->

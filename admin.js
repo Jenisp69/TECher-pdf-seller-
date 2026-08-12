@@ -929,6 +929,7 @@ async function removeSubjectFromStudent(enrollmentId, subjectId) {
     console.error("Delete error:", error);
   } else {
     await renderStudentEnrolledCourses(activeStudentId);
+    await loadAddableSubjects(); // Refresh dynamic picklist state
   }
 }
 
@@ -983,8 +984,10 @@ function handleManageClassChange() {
     semGroup.classList.add('hidden');
     const semSelect = document.getElementById('add-sub-semester');
     if (semSelect) semSelect.value = '';
-    loadAddableSubjects();
   }
+
+  const picklist = document.getElementById('add-sub-picklist');
+  picklist.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">Select Level and Stream above to list subjects.</p>';
 
   if (!classVal) return;
 
@@ -1004,18 +1007,26 @@ function handleManageStreamChange() {
   }
 }
 
-function loadAddableSubjects() {
+async function loadAddableSubjects() {
   const classVal = document.getElementById('add-sub-class').value;
   const streamId = document.getElementById('add-sub-stream').value;
   const semVal = document.getElementById('add-sub-semester').value;
-  const subSelect = document.getElementById('add-sub-subject');
+  const picklist = document.getElementById('add-sub-picklist');
 
-  subSelect.innerHTML = '<option value="">-- Select Subject --</option>';
+  picklist.innerHTML = '';
 
   if (!classVal || !streamId || (classVal === 'bachelor' && !semVal)) {
-    subSelect.disabled = true;
+    picklist.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">Complete level, stream, and semester selections above.</p>';
     return;
   }
+
+  // Fetch currently enrolled subject IDs for active student to display status
+  const { data: existingCourses } = await supabaseClient
+    .from('student_courses')
+    .select('subject_id')
+    .eq('student_id', activeStudentId);
+
+  const enrolledSubjectIds = new Set((existingCourses || []).map(c => c.subject_id));
 
   const filtered = globalSubjects.filter(sub => {
     const matchClass = sub.class_level === classVal;
@@ -1024,18 +1035,39 @@ function loadAddableSubjects() {
     return matchClass && matchStream && matchSem;
   });
 
-  filtered.forEach(s => {
-    const opt = document.createElement('option');
-    opt.value = s.id;
-    opt.textContent = `${s.subject_name} (NPR ${s.price_npr || 0})`;
-    subSelect.appendChild(opt);
-  });
+  if (filtered.length === 0) {
+    picklist.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem; padding: 10px; text-align: center;">No subjects found for this selection.</p>';
+    return;
+  }
 
-  subSelect.disabled = false;
+  const streamObj = globalStreams.find(s => s.id === streamId);
+  const streamName = streamObj ? streamObj.stream_name : '';
+
+  filtered.forEach(subject => {
+    const isEnrolled = enrolledSubjectIds.has(subject.id);
+    const item = document.createElement('div');
+    item.className = `picklist-item ${isEnrolled ? 'added' : ''}`;
+    
+    const tagInfo = classVal === 'bachelor' ? `${streamName} | ${semVal} Sem` : `${streamName}`;
+
+    item.innerHTML = `
+      <div class="picklist-title">
+        <b>${subject.subject_name}</b>
+        <span class="picklist-tag">${tagInfo} | NPR ${subject.price_npr || 0}</span>
+      </div>
+      <button type="button" 
+              class="btn-toggle-add ${isEnrolled ? 'added' : ''}" 
+              ${isEnrolled ? 'disabled' : ''} 
+              onclick="addSubjectToSelectedStudent('${subject.id}')">
+        ${isEnrolled ? '✓ Enrolled' : '➕ Add'}
+      </button>
+    `;
+
+    picklist.appendChild(item);
+  });
 }
 
-async function addSubjectToSelectedStudent() {
-  const subjectId = document.getElementById('add-sub-subject').value;
+async function addSubjectToSelectedStudent(subjectId) {
   if (!activeStudentId || !subjectId) {
     alert('Select a subject to add.');
     return;
@@ -1061,7 +1093,7 @@ async function addSubjectToSelectedStudent() {
     alert(`Error adding subject: ${error.message}`);
   } else {
     await renderStudentEnrolledCourses(activeStudentId);
-    alert('✅ Subject added to student successfully!');
+    await loadAddableSubjects(); // Refresh picklist UI button status
   }
 }
 

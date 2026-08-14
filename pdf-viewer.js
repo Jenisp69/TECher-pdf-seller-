@@ -1,15 +1,18 @@
 /* ==========================================
-   ADVANCED INTERACTIVE PDF ENGINE (OPTIMIZED)
+   ADVANCED INTERACTIVE PDF ENGINE (VRAM OPTIMIZED)
    ========================================== */
 
 (() => {
   'use strict';
 
+  // --- Hardware Capability Detection ---
+  const isLowEndMobile = (navigator.hardwareConcurrency || 4) <= 4 || window.innerWidth <= 768;
+  const BATCH_SIZE = isLowEndMobile ? 3 : 10;
+
   // --- Core State Management ---
   let currentPdfDoc = null;
   let totalPagesCount = 0;
   let currentlyLoadedPage = 0;
-  const BATCH_SIZE = 10;
   let isLoadingBatch = false;
 
   // --- Layout & View Settings ---
@@ -81,7 +84,111 @@
   }
 
   /* ==========================================
-     INITIALIZATION & PDF LOADING
+     STREAMING FETCH HELPER
+     ========================================== */
+  async function fetchStreamWithProgress(url, statusCallback, statusPrefix = '⏳ Downloading') {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const contentLength = response.headers.get('content-length');
+    const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+    const reader = response.body.getReader();
+    let receivedLength = 0;
+    const chunks = [];
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      receivedLength += value.length;
+
+      const mbReceived = (receivedLength / (1024 * 1024)).toFixed(1);
+      const mbTotal = totalBytes ? (totalBytes / (1024 * 1024)).toFixed(1) : null;
+      const calculatedPct = totalBytes ? Math.min(80, Math.round((receivedLength / totalBytes) * 70) + 15) : null;
+
+      statusCallback(
+        mbTotal
+          ? `${statusPrefix}: ${mbReceived} MB / ${mbTotal} MB...`
+          : `${statusPrefix}: ${mbReceived} MB...`,
+        calculatedPct
+      );
+    }
+
+    const concatenated = new Uint8Array(receivedLength);
+    let position = 0;
+    for (const chunk of chunks) {
+      concatenated.set(chunk, position);
+      position += chunk.length;
+    }
+    return concatenated;
+  }
+
+  /* ==========================================
+     BACKGROUND SPECULATIVE PRELOAD ENGINE
+     ========================================== */
+  const pdfBufferCache = new Map();
+
+  /**
+   * Background fetcher that streams document binary into RAM before user clicks.
+   */
+  async function preloadDocumentPayload(subjectId, pdfPath) {
+    if (!pdfPath || pdfBufferCache.has(subjectId)) return;
+
+    try {
+      const driveMatch = pdfPath.match(/[-_a-zA-Z0-9]{25,}/);
+      let arrayBuffer = null;
+
+      if (pdfPath.startsWith('http') && driveMatch && typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') {
+        const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${driveMatch[0]}`;
+        const response = await fetch(proxyUrl);
+        if (!response.ok) return;
+
+        const rawTextBytes = await response.arrayBuffer();
+        const base64String = new TextDecoder().decode(rawTextBytes).trim();
+
+        if (!base64String.startsWith('ERROR:')) {
+          const dataUrl = `data:application/pdf;base64,${base64String}`;
+          const blobRes = await fetch(dataUrl);
+          arrayBuffer = await blobRes.arrayBuffer();
+        }
+      } else if (pdfPath.startsWith('http')) {
+        const res = await fetch(pdfPath);
+        if (res.ok) arrayBuffer = await res.arrayBuffer();
+      } else {
+        const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
+        const { data: blobData } = await supabaseClient.storage.from(bucketName).download(pdfPath);
+        if (blobData) arrayBuffer = await blobData.arrayBuffer();
+      }
+
+      if (arrayBuffer) {
+        pdfBufferCache.set(subjectId, arrayBuffer);
+        console.log(`⚡ [Preload Complete] Payload cached for subject: ${subjectId}`);
+      }
+    } catch (err) {
+      console.warn(`[Background Preload Non-Fatal Error] ${subjectId}:`, err);
+    }
+  }
+
+  /**
+   * Hook to call as soon as student logs in or course list renders.
+   */
+  window.preloadAllStudentCourses = function (enrolledSubjects) {
+    if (!Array.isArray(enrolledSubjects)) return;
+
+    // Stagger requests slightly to prevent browser socket starvation
+    enrolledSubjects.forEach((sub, index) => {
+      if (sub.pdf_storage_path) {
+        setTimeout(() => {
+          preloadDocumentPayload(sub.id, sub.pdf_storage_path);
+        }, index * 800);
+      }
+    });
+  };
+
+  /* ==========================================
+     INITIALIZATION & PDF LOADING (CACHE-AWARE)
      ========================================== */
   window.initReader = async function (sessionData) {
     const viewerContainer = document.getElementById('viewer-container');
@@ -90,33 +197,129 @@
     currentlyLoadedPage = 0;
     isLoadingBatch = false;
     zoomMultiplier = 1.0;
-
     updateZoomLabel();
 
     activeSubjectId = sessionData?.subjectName || 'course_doc';
-    viewerContainer.innerHTML =
-      '<p style="color:var(--text-muted); text-align:center; padding:30px;">⏳ Securing & loading document...</p>';
+
+    // --- Dynamic Dynamic Progress Bar Controller ---
+    let currentPercent = 5;
+    let targetPercent = 10;
+    let progressInterval = null;
+    let lastText = '';
+
+    const renderStatus = (text, percent) => {
+      viewerContainer.innerHTML = `
+        <div style="text-align:center; padding:40px 20px;">
+          <p style="color:var(--text-muted, #a0aec0); font-size: 0.95rem; margin:0;">${text}</p>
+          <div style="width: 80%; max-width: 320px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; margin: 14px auto 0 auto; overflow: hidden;">
+            <div style="width: ${percent}%; height: 100%; background: var(--accent, #007bff); transition: width 0.25s ease-out;"></div>
+          </div>
+        </div>`;
+    };
+
+    const startProgressLoop = () => {
+      if (progressInterval) clearInterval(progressInterval);
+      progressInterval = setInterval(() => {
+        if (currentPercent < targetPercent) {
+          currentPercent += Math.max(0.3, (targetPercent - currentPercent) * 0.15);
+        } else if (targetPercent < 88) {
+          // Continuous, natural crawl while waiting on slow network/proxy responses
+          currentPercent += (88 - currentPercent) * 0.02 + 0.1;
+        }
+        renderStatus(lastText, Math.min(Math.round(currentPercent), 99));
+      }, 150);
+    };
+
+    const updateStatus = (text, forcedPercent = null) => {
+      lastText = text;
+      if (forcedPercent !== null) {
+        targetPercent = Math.max(targetPercent, forcedPercent);
+      }
+      if (!progressInterval) startProgressLoop();
+    };
+
+    const stopProgressLoop = () => {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+    };
 
     if (!sessionData || !sessionData.pdfPath) {
       showError('No document path provided.');
       return;
     }
 
-    const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
-
     try {
-      const { data: blobData, error: downloadError } = await supabaseClient.storage
-        .from(bucketName)
-        .download(sessionData.pdfPath);
+      let arrayBuffer = null;
+      const pdfPath = sessionData.pdfPath;
 
-      if (downloadError || !blobData) {
-        throw new Error(downloadError ? downloadError.message : 'Failed to fetch secure document stream.');
+      // --- CHECK 1: Instant RAM Cache Hit ---
+      if (pdfBufferCache.has(activeSubjectId)) {
+        updateStatus('⚡ Instantly launching cached document payload...', 90);
+        arrayBuffer = pdfBufferCache.get(activeSubjectId);
+      }
+      // --- CHECK 2: Cache Miss -> Stream from Network with Dynamic Progress Bar ---
+      else {
+        updateStatus('⏳ Securing & establishing document stream...', 15);
+        startProgressLoop();
+
+        const driveMatch = pdfPath ? pdfPath.match(/[-_a-zA-Z0-9]{25,}/) : null;
+
+        if (pdfPath.startsWith('http://') || pdfPath.startsWith('https://')) {
+          if (driveMatch) {
+            const fileId = driveMatch[0];
+            if (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') {
+              const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${fileId}`;
+
+              const rawTextBytes = await fetchStreamWithProgress(
+                proxyUrl,
+                (msg, pct) => updateStatus(msg, pct || 45),
+                '⏳ Fetching document payload via proxy'
+              );
+
+              updateStatus('⚡ Decoding binary stream (C++ engine)...', 80);
+              const base64String = new TextDecoder().decode(rawTextBytes).trim();
+
+              if (base64String.startsWith('ERROR:')) {
+                throw new Error(base64String);
+              }
+
+              const dataUrl = `data:application/pdf;base64,${base64String}`;
+              const blobRes = await fetch(dataUrl);
+              arrayBuffer = await blobRes.arrayBuffer();
+            } else {
+              throw new Error('Google Apps Script proxy URL is undefined.');
+            }
+          } else {
+            const concatenated = await fetchStreamWithProgress(
+              pdfPath,
+              (msg, pct) => updateStatus(msg, pct || 50),
+              '⏳ Downloading document stream'
+            );
+            arrayBuffer = concatenated.buffer;
+          }
+        } else {
+          const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
+          const { data: blobData, error: downloadError } = await supabaseClient.storage
+            .from(bucketName)
+            .download(pdfPath);
+
+          if (downloadError || !blobData) {
+            throw new Error(downloadError ? downloadError.message : 'Failed to fetch secure document stream.');
+          }
+          arrayBuffer = await blobData.arrayBuffer();
+        }
+
+        // Cache for subsequent opens
+        pdfBufferCache.set(activeSubjectId, arrayBuffer);
       }
 
-      const arrayBuffer = await blobData.arrayBuffer();
+      updateStatus('🚀 Initializing PDF render worker...', 95);
 
+      // CLONE ArrayBuffer using .slice(0) to prevent worker detachment of cached buffer
       const loadingTask = pdfjsLib.getDocument({
-        data: arrayBuffer,
+        data: arrayBuffer.slice(0),
         disableAutoFetch: true,
         disableStream: false,
       });
@@ -124,8 +327,8 @@
       currentPdfDoc = await loadingTask.promise;
       totalPagesCount = currentPdfDoc.numPages;
 
+      stopProgressLoop();
       setTotalPages(totalPagesCount);
-
       viewerContainer.innerHTML = '';
 
       const firstPage = await currentPdfDoc.getPage(1);
@@ -157,13 +360,14 @@
 
       initToolbarAutoHide();
     } catch (err) {
+      stopProgressLoop();
       console.error('PDF render error:', err);
       showError(`Failed to load document: ${err.message}`);
     }
   };
 
   /* ==========================================
-     BATCH PAGE LOADER
+     BATCH PAGE LOADER (ADAPTIVE EXECUTOR)
      ========================================== */
   async function loadNextBatch() {
     if (isLoadingBatch || currentlyLoadedPage >= totalPagesCount) return;
@@ -188,7 +392,9 @@
       wrapper.className = 'page-wrapper';
       wrapper.id = `page-${pageNum}`;
       wrapper.dataset.pageNum = pageNum;
+      wrapper.dataset.rendered = 'false';
       wrapper.style.position = 'relative';
+      wrapper.style.minHeight = '400px';
 
       fragment.appendChild(wrapper);
       renderTasks.push({ pageNum, wrapper });
@@ -196,7 +402,14 @@
 
     pagesList?.appendChild(fragment);
 
-    await Promise.all(renderTasks.map((task) => renderSinglePage(task.pageNum, task.wrapper)));
+    // Adaptive rendering strategy based on device capability
+    if (isLowEndMobile) {
+      for (const task of renderTasks) {
+        await renderSinglePage(task.pageNum, task.wrapper);
+      }
+    } else {
+      await Promise.all(renderTasks.map((task) => renderSinglePage(task.pageNum, task.wrapper)));
+    }
 
     currentlyLoadedPage = endPage;
     isLoadingBatch = false;
@@ -216,9 +429,11 @@
   }
 
   /* ==========================================
-     PAGE RENDERER (HIGH-DPI OPTIMIZED)
+     PAGE RENDERER (VRAM-AWARE)
      ========================================== */
   async function renderSinglePage(pageNum, wrapper) {
+    if (wrapper.dataset.rendered === 'true' && wrapper.querySelector('canvas')) return;
+
     try {
       wrapper.innerHTML = '';
       const page = await currentPdfDoc.getPage(pageNum);
@@ -228,8 +443,9 @@
       const viewport = page.getViewport({ scale: effectiveScale });
 
       wrapper.style.width = `${viewport.width}px`;
+      wrapper.style.minHeight = `${viewport.height}px`;
 
-      // 1. PDF Canvas
+      // 1. PDF Render Canvas
       const pdfCanvas = document.createElement('canvas');
       const context = pdfCanvas.getContext('2d', { alpha: false });
 
@@ -243,7 +459,7 @@
       pdfCanvas.oncontextmenu = () => false;
       wrapper.appendChild(pdfCanvas);
 
-      // 2. Drawing Canvas Overlay
+      // 2. Drawing Overlay Canvas
       const drawCanvas = document.createElement('canvas');
       drawCanvas.className = 'draw-overlay';
       drawCanvas.width = viewport.width * dpr;
@@ -260,7 +476,7 @@
       wrapper.appendChild(drawCanvas);
       attachDrawingEvents(drawCanvas, pageNum);
 
-      // 3. Collapsible Note Tag
+      // 3. Persistent Page Note UI
       const noteTrigger = document.createElement('button');
       noteTrigger.className = 'page-note-trigger';
       noteTrigger.innerHTML = `<i class="fa-solid fa-note-sticky"></i> Note`;
@@ -290,13 +506,66 @@
 
       await page.render({ canvasContext: context, viewport }).promise;
       page.cleanup();
+      wrapper.dataset.rendered = 'true';
     } catch (err) {
       console.error(`Error rendering page ${pageNum}:`, err);
     }
   }
 
   /* ==========================================
-     PINCH & ZOOM GESTURE ENGINE (MOBILE ONLY)
+     VRAM CLEANUP & RE-RENDER OBSERVER
+     ========================================== */
+  function unloadOffscreenCanvas(wrapper) {
+    const canvases = wrapper.querySelectorAll('canvas');
+    if (canvases.length > 0) {
+      canvases.forEach((canvas) => {
+        canvas.width = 0; // Release VRAM allocation instantly
+        canvas.height = 0;
+        canvas.remove();
+      });
+      wrapper.dataset.rendered = 'false';
+    }
+  }
+
+  function setupPageObserver() {
+    if (pageObserver) pageObserver.disconnect();
+
+    pageObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(async (entry) => {
+          const wrapper = entry.target;
+          const pageNum = parseInt(wrapper.dataset.pageNum, 10);
+
+          if (entry.isIntersecting) {
+            // Re-render canvas if unloaded by VRAM garbage collector
+            if (wrapper.dataset.rendered === 'false') {
+              await renderSinglePage(pageNum, wrapper);
+            }
+
+            const pageInput = document.getElementById('page-jump-input');
+            if (pageInput && document.activeElement !== pageInput) {
+              pageInput.value = pageNum;
+            }
+          } else {
+            // Unload canvas from DOM if page is far off-screen on low-end hardware
+            if (isLowEndMobile && wrapper.dataset.rendered === 'true') {
+              unloadOffscreenCanvas(wrapper);
+            }
+          }
+        });
+      },
+      {
+        root: null,
+        rootMargin: '300px 0px 300px 0px',
+        threshold: 0,
+      }
+    );
+
+    document.querySelectorAll('.page-wrapper').forEach((p) => pageObserver.observe(p));
+  }
+
+  /* ==========================================
+     PINCH & ZOOM GESTURE ENGINE
      ========================================== */
   function setupTouchPinchZoom() {
     const readerSection = document.getElementById('reader-section');
@@ -358,34 +627,6 @@
     }
   }
 
-  /* ==========================================
-     VIEWPORT PAGE OBSERVER
-     ========================================== */
-  function setupPageObserver() {
-    if (pageObserver) pageObserver.disconnect();
-
-    pageObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            const pageNum = entry.target.dataset.pageNum;
-            const pageInput = document.getElementById('page-jump-input');
-            if (pageInput && document.activeElement !== pageInput) {
-              pageInput.value = pageNum;
-            }
-          }
-        });
-      },
-      {
-        root: null,
-        rootMargin: '-45% 0px -45% 0px',
-        threshold: 0,
-      }
-    );
-
-    document.querySelectorAll('.page-wrapper').forEach((p) => pageObserver.observe(p));
-  }
-
   function getMostVisiblePageElement() {
     const pages = document.querySelectorAll('.page-wrapper');
     const viewportCenter = window.innerHeight / 2;
@@ -407,7 +648,7 @@
   }
 
   /* ==========================================
-     PEN / DRAWING ENGINE (PERSISTENT & RAF OPTIMIZED)
+     DRAWING ENGINE (RAF OPTIMIZED)
      ========================================== */
   function attachDrawingEvents(canvas, pageNum) {
     const ctx = canvas.getContext('2d');
@@ -422,7 +663,6 @@
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    // Render historical strokes
     redrawSavedStrokes(canvas, pageNum);
 
     function getCoords(e) {
@@ -573,6 +813,7 @@
     for (let pageNum = 1; pageNum <= loadedPagesCount; pageNum++) {
       const wrapper = document.getElementById(`page-${pageNum}`);
       if (wrapper) {
+        wrapper.dataset.rendered = 'false';
         await renderSinglePage(pageNum, wrapper);
       }
     }

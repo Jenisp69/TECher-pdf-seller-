@@ -377,10 +377,29 @@ body {
   font-size: 0.8rem;
 }
 
+
+@keyframes pulseSlide {
+  0% {
+    left: -40%;
+  }
+  50% {
+    left: 100%;
+  }
+  100% {
+    left: -40%;
+  }
+}
+
+.pulse-loader {
+  position: absolute;
+  top: 0;
+  left: -40%;
+}
+
 .filter-group {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 3px; /* Reduced gap between rows */
 }
 
@@ -393,7 +412,7 @@ body {
   font-weight: 600;
   color: var(--text-muted);
   white-space: nowrap;
-  min-width: 95px;
+  flex-shrink: 0; /* Prevents text from being squeezed/overlapping */
   margin-bottom: 0;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -409,8 +428,9 @@ body {
   padding-bottom: 2px;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
-  /* Hide scrollbar for clean UI */
   scrollbar-width: none; 
+  flex: 1; /* Takes remaining width cleanly */
+  min-width: 0; /* Enables horizontal scroll without pushing label */
 }
 
 .pill-group::-webkit-scrollbar {
@@ -854,6 +874,8 @@ input:focus, select:focus {
 .social-btn.instagram:hover { background: rgba(225, 48, 108, 0.4); }
 .social-btn.whatsapp { background: rgba(37, 211, 102, 0.2); border-color: rgba(37, 211, 102, 0.4); }
 .social-btn.whatsapp:hover { background: rgba(37, 211, 102, 0.4); }
+.social-btn.youtube { background: rgba(255, 0, 0, 0.2); border-color: rgba(255, 0, 0, 0.4); }
+.social-btn.youtube:hover { background: rgba(255, 0, 0, 0.4); box-shadow: 0 4px 15px rgba(255, 0, 0, 0.25); }
 
 /* ==========================================
    10. Modals & Overlays

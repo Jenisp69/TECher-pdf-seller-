@@ -1,3 +1,5 @@
+
+
 const DEFAULT_CLASSES = [
   { id: '11', name: 'Class 11' },
   { id: '12', name: 'Class 12' },
@@ -48,16 +50,46 @@ function populateClassDropdowns() {
   });
 }
 
+/* Helper: Convert ArrayBuffer to Base64 */
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+}
+
 /* ==========================================
    Hierarchy & Dynamic Streams/Classes Manager
    ========================================== */
 
 async function fetchStreamsAndSubjects() {
   const { data: streams } = await supabaseClient.from('streams').select('*');
+  
+  // Dual-query strategy: Fetch from hierarchy_nodes and fall back / merge subjects
+  const { data: hierarchyNodes } = await supabaseClient
+    .from('hierarchy_nodes')
+    .select('*')
+    .eq('node_type', 'subject');
+
   const { data: subjects } = await supabaseClient.from('subjects').select('*');
 
   globalStreams = streams || [];
-  globalSubjects = subjects || [];
+
+  if (hierarchyNodes && hierarchyNodes.length > 0) {
+    globalSubjects = hierarchyNodes.map(node => {
+      const subMatch = (subjects || []).find(s => s.id === node.id);
+      return {
+        ...subMatch,
+        ...node,
+        subject_name: node.node_name || node.subject_name || (subMatch ? subMatch.subject_name : '')
+      };
+    });
+  } else {
+    globalSubjects = subjects || [];
+  }
 }
 
 function handleClassChange(prefix) {
@@ -178,6 +210,7 @@ async function deleteSelectedClass() {
       
     if (streams && streams.length > 0) {
       const streamIds = streams.map(s => s.id);
+      await supabaseClient.from('hierarchy_nodes').delete().in('id', streamIds);
       await supabaseClient.from('subjects').delete().in('stream_id', streamIds);
       await supabaseClient.from('streams').delete().eq('class_level', classVal);
     }
@@ -246,12 +279,24 @@ async function promptAddNewSubject() {
     : `${streamId}-${cleanSubjectName}`;
 
   try {
+    // Insert into hierarchy_nodes
+    await supabaseClient
+      .from('hierarchy_nodes')
+      .upsert([{
+        id: rawSubjectId,
+        node_name: subjectName.trim(),
+        node_type: 'subject',
+        pdf_storage_path: '',
+        total_pages: 0
+      }]);
+
+    // Insert into subjects
     const { error } = await supabaseClient
       .from('subjects')
-      .insert([{
+      .upsert([{
         id: rawSubjectId,
         subject_name: subjectName.trim(),
-        pdf_storage_path: `${rawSubjectId}/notes.pdf`,
+        pdf_storage_path: '',
         class_level: classVal,
         stream_id: streamId,
         semester: classVal === 'bachelor' ? semVal : null,
@@ -300,13 +345,13 @@ function loadManagerSubjects() {
     item.className = 'picklist-item';
     item.innerHTML = `
       <div class="picklist-title">
-        <b>${sub.subject_name}</b>
-        <span class="picklist-tag">${sub.class_level} | ${sub.semester || 'All'} | NPR ${sub.price_npr || 0} (${sub.total_pages || 0} Pages)</span>
+        <b>${sub.subject_name || sub.node_name}</b>
+        <span class="picklist-tag">${sub.class_level || 'N/A'} | ${sub.semester || 'All'} | NPR ${sub.price_npr || 0} (${sub.total_pages || 0} Pages)</span>
       </div>
       <div style="display:flex; gap:6px;">
         <button type="button" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="editSubjectPrice('${sub.id}', ${sub.price_npr || 0})">💰 Price</button>
-        <button type="button" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="renameSubject('${sub.id}', '${sub.subject_name}')">✏️ Rename</button>
-        <button type="button" class="btn-danger" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="deleteSubject('${sub.id}', '${sub.subject_name}')">🗑️ Remove</button>
+        <button type="button" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="renameSubject('${sub.id}', '${sub.subject_name || sub.node_name}')">✏️ Rename</button>
+        <button type="button" class="btn-danger" style="padding:4px 8px; font-size:0.75rem; width: auto;" onclick="deleteSubject('${sub.id}', '${sub.subject_name || sub.node_name}')">🗑️ Remove</button>
       </div>
     `;
     listContainer.appendChild(item);
@@ -375,6 +420,7 @@ async function deleteSelectedStream() {
     if (subs && subs.length > 0) {
       const subIds = subs.map(s => s.id);
       await supabaseClient.from('student_courses').delete().in('subject_id', subIds);
+      await supabaseClient.from('hierarchy_nodes').delete().in('id', subIds);
       await supabaseClient.from('subjects').delete().eq('stream_id', streamId);
     }
 
@@ -392,6 +438,11 @@ async function deleteSelectedStream() {
 async function renameSubject(subjectId, currentName) {
   const newName = prompt('Enter new Subject Name:', currentName);
   if (newName && newName.trim() && newName !== currentName) {
+    await supabaseClient
+      .from('hierarchy_nodes')
+      .update({ node_name: newName.trim() })
+      .eq('id', subjectId);
+
     const { error } = await supabaseClient
       .from('subjects')
       .update({ subject_name: newName.trim() })
@@ -411,6 +462,7 @@ async function deleteSubject(subjectId, subjectName) {
 
   try {
     await supabaseClient.from('student_courses').delete().eq('subject_id', subjectId);
+    await supabaseClient.from('hierarchy_nodes').delete().eq('id', subjectId);
 
     const { error } = await supabaseClient.from('subjects').delete().eq('id', subjectId);
     if (error) throw error;
@@ -461,7 +513,7 @@ function loadAvailableSubjects(prefix) {
 
     item.innerHTML = `
       <div class="picklist-title">
-        ${subject.subject_name}
+        ${subject.subject_name || subject.node_name}
         <span class="picklist-tag">${tagInfo} | NPR ${subject.price_npr || 0}</span>
       </div>
       <button type="button" class="btn-toggle-add ${isAdded ? 'added' : ''}" onclick="toggleSubjectCart('${subject.id}')">
@@ -510,7 +562,7 @@ function renderCart() {
       : `${subject.stream_name}`;
 
     badge.innerHTML = `
-      <span>🏷️ <b>${subject.subject_name}</b> <small>(${metaTag} - NPR ${subject.price_npr || 0})</small></span>
+      <span>🏷️ <b>${subject.subject_name || subject.node_name}</b> <small>(${metaTag} - NPR ${subject.price_npr || 0})</small></span>
       <span class="cart-badge-remove" onclick="toggleSubjectCart('${subject.id}')">✕</span>
     `;
     
@@ -541,7 +593,7 @@ function loadUploadSubjects() {
   filtered.forEach(subject => {
     const opt = document.createElement('option');
     opt.value = subject.id;
-    opt.textContent = `${subject.subject_name} (NPR ${subject.price_npr || 0})`;
+    opt.textContent = `${subject.subject_name || subject.node_name} (NPR ${subject.price_npr || 0})`;
     uploadSubject.appendChild(opt);
   });
 
@@ -596,7 +648,6 @@ document.getElementById('account-form')?.addEventListener('submit', async (e) =>
       subject_id: sub.id
     }));
 
-    // Fetch existing enrollments first to deduplicate Safely
     const { data: existingCourses } = await supabaseClient
       .from('student_courses')
       .select('subject_id')
@@ -629,50 +680,9 @@ document.getElementById('account-form')?.addEventListener('submit', async (e) =>
   }
 });
 
-async function compressCamScannerPdf(arrayBuffer, quality = 0.65, scale = 1.2, onProgress = null) {
-  const pdf = await pdfjsLib.getDocument({ 
-    data: arrayBuffer,
-    disableFontFace: true 
-  }).promise;
-  
-  const newPdfDoc = await PDFLib.PDFDocument.create();
-
-  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    
-    const baseViewport = page.getViewport({ scale: 1.0 });
-    const renderViewport = page.getViewport({ scale: scale });
-    
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d', { alpha: false });
-    canvas.height = renderViewport.height;
-    canvas.width = renderViewport.width;
-
-    await page.render({ canvasContext: context, viewport: renderViewport }).promise;
-
-    const jpegDataUrl = canvas.toDataURL('image/jpeg', quality);
-    const res = await fetch(jpegDataUrl);
-    const jpegImageBytes = await res.arrayBuffer();
-
-    const image = await newPdfDoc.embedJpg(jpegImageBytes);
-    
-    const newPage = newPdfDoc.addPage([baseViewport.width, baseViewport.height]);
-    newPage.drawImage(image, {
-      x: 0,
-      y: 0,
-      width: baseViewport.width,
-      height: baseViewport.height,
-    });
-
-    page.cleanup();
-
-    if (onProgress) {
-      onProgress(pageNum, pdf.numPages);
-    }
-  }
-
-  return await newPdfDoc.save({ useObjectStreams: true });
-}
+/* ==========================================
+   DIRECT GOOGLE DRIVE PDF UPLOAD & APPEND PIPELINE
+   ========================================== */
 
 async function handleDocumentUpdate(qualityMode = 'auto') {
   const subjectId = document.getElementById('upload-subject').value;
@@ -693,53 +703,32 @@ async function handleDocumentUpdate(qualityMode = 'auto') {
   }
 
   const newFile = fileInput.files[0];
-  const storagePath = `${subjectId}/notes.pdf`;
-
-  let targetQuality = 0.65;
-  let targetScale = 1.2;
-
-  if (qualityMode === 'high') {
-    targetQuality = 0.85;
-    targetScale = 1.8;
-  } else if (qualityMode === 'standard') {
-    targetQuality = 0.50;
-    targetScale = 1.0;
-  } else if (qualityMode === 'auto') {
-    targetQuality = 0.65;
-    targetScale = 1.2;
-  }
 
   statusDiv.style.color = 'var(--text-main)';
-  statusDiv.textContent = `⏳ Preparing document (${qualityMode.toUpperCase()} mode)...`;
+  statusDiv.textContent = `⏳ Processing document (Lossless 1:1 Mode)...`;
   if (progressContainer) progressContainer.classList.remove('hidden');
-  if (progressBar) progressBar.style.width = '0%';
-
-  const updateProgress = (current, total, stage = 'Compressing') => {
-    const percent = Math.round((current / total) * 100);
-    if (progressBar) progressBar.style.width = `${percent}%`;
-    statusDiv.textContent = `⚙️ ${stage} Page ${current} / ${total} (${percent}%)`;
-  };
+  if (progressBar) progressBar.style.width = '10%';
 
   try {
     let finalPdfBytes;
     let finalPageCount = 0;
 
     if (mode === 'replace') {
-      const arrayBuffer = await newFile.arrayBuffer();
-      
+      const newFileBuffer = await newFile.arrayBuffer();
+
       if (newFile.type === 'application/pdf') {
-        finalPdfBytes = await compressCamScannerPdf(arrayBuffer, targetQuality, targetScale, (curr, total) => {
-          updateProgress(curr, total, 'Optimizing Scanned Document');
-        });
+        const doc = await PDFLib.PDFDocument.load(newFileBuffer, { ignoreEncryption: true });
+        finalPdfBytes = await doc.save({ useObjectStreams: true });
+        finalPageCount = doc.getPageCount();
       } else {
-        const existingPdfDoc = await PDFLib.PDFDocument.create();
+        const doc = await PDFLib.PDFDocument.create();
         let image;
         if (newFile.type.includes('jpeg') || newFile.type.includes('jpg')) {
-          image = await existingPdfDoc.embedJpg(arrayBuffer);
+          image = await doc.embedJpg(newFileBuffer);
         } else if (newFile.type.includes('png')) {
-          image = await existingPdfDoc.embedPng(arrayBuffer);
+          image = await doc.embedPng(newFileBuffer);
         }
-        const page = existingPdfDoc.addPage(PDFLib.PageSizes.A4);
+        const page = doc.addPage(PDFLib.PageSizes.A4);
         const { width, height } = page.getSize();
         const dims = image.scaleToFit(width - 40, height - 40);
         page.drawImage(image, {
@@ -748,48 +737,59 @@ async function handleDocumentUpdate(qualityMode = 'auto') {
           width: dims.width,
           height: dims.height,
         });
-        finalPdfBytes = await existingPdfDoc.save({ useObjectStreams: true });
+        finalPdfBytes = await doc.save({ useObjectStreams: true });
+        finalPageCount = doc.getPageCount();
       }
-
-      const tempDoc = await PDFLib.PDFDocument.load(finalPdfBytes);
-      finalPageCount = tempDoc.getPageCount();
     } 
     else if (mode === 'append') {
-      let existingPdfDoc;
-      
-      const { data: existingFile, error: downloadError } = await supabaseClient.storage
-        .from(STORAGE_BUCKET)
-        .download(storagePath);
+      const subjectObj = globalSubjects.find(s => s.id === subjectId);
+      const existingPath = subjectObj ? subjectObj.pdf_storage_path : '';
 
-      if (downloadError || !existingFile) {
-        existingPdfDoc = await PDFLib.PDFDocument.create();
+      let mainDoc;
+      const driveMatch = existingPath ? existingPath.match(/[-_a-zA-Z0-9]{25,}/) : null;
+
+      if (driveMatch) {
+        // Safe fetch via Apps Script GET proxy to bypass browser CORS
+        const proxyRes = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?fileId=${driveMatch[0]}`);
+        const proxyJson = await proxyRes.json();
+
+        if (proxyJson.status === 'success') {
+          const binaryStr = window.atob(proxyJson.base64Data);
+          const len = binaryStr.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+          mainDoc = await PDFLib.PDFDocument.load(bytes.buffer, { ignoreEncryption: true });
+        } else {
+          mainDoc = await PDFLib.PDFDocument.create();
+        }
+      } else if (existingPath && existingPath.startsWith('http')) {
+        const res = await fetch(existingPath);
+        if (res.ok) {
+          const existingBuffer = await res.arrayBuffer();
+          mainDoc = await PDFLib.PDFDocument.load(existingBuffer, { ignoreEncryption: true });
+        } else {
+          mainDoc = await PDFLib.PDFDocument.create();
+        }
       } else {
-        const existingBuffer = await existingFile.arrayBuffer();
-        existingPdfDoc = await PDFLib.PDFDocument.load(existingBuffer, { ignoreEncryption: true });
+        mainDoc = await PDFLib.PDFDocument.create();
       }
 
       const newFileBuffer = await newFile.arrayBuffer();
 
       if (newFile.type === 'application/pdf') {
-        finalPdfBytes = await compressCamScannerPdf(newFileBuffer, targetQuality, targetScale, (curr, total) => {
-          updateProgress(curr, total, 'Compressing Appended Pages');
-        });
-        const tempDoc = await PDFLib.PDFDocument.load(finalPdfBytes);
-        const copiedPages = await existingPdfDoc.copyPages(tempDoc, tempDoc.getPageIndices());
-        copiedPages.forEach(page => existingPdfDoc.addPage(page));
-      } 
-      else if (newFile.type.includes('image')) {
+        const newDoc = await PDFLib.PDFDocument.load(newFileBuffer, { ignoreEncryption: true });
+        const copiedPages = await mainDoc.copyPages(newDoc, newDoc.getPageIndices());
+        copiedPages.forEach(page => mainDoc.addPage(page));
+      } else if (newFile.type.includes('image')) {
         let image;
         if (newFile.type.includes('jpeg') || newFile.type.includes('jpg')) {
-          image = await existingPdfDoc.embedJpg(newFileBuffer);
+          image = await mainDoc.embedJpg(newFileBuffer);
         } else if (newFile.type.includes('png')) {
-          image = await existingPdfDoc.embedPng(newFileBuffer);
+          image = await mainDoc.embedPng(newFileBuffer);
         }
-        
-        const page = existingPdfDoc.addPage(PDFLib.PageSizes.A4);
+        const page = mainDoc.addPage(PDFLib.PageSizes.A4);
         const { width, height } = page.getSize();
         const dims = image.scaleToFit(width - 40, height - 40);
-        
         page.drawImage(image, {
           x: (width - dims.width) / 2,
           y: (height - dims.height) / 2,
@@ -798,30 +798,60 @@ async function handleDocumentUpdate(qualityMode = 'auto') {
         });
       }
 
-      finalPageCount = existingPdfDoc.getPageCount();
-      finalPdfBytes = await existingPdfDoc.save({ useObjectStreams: true });
+      finalPageCount = mainDoc.getPageCount();
+      finalPdfBytes = await mainDoc.save({ useObjectStreams: true });
     }
 
-    statusDiv.textContent = '☁️ Saving file to cloud storage...';
-    if (progressBar) progressBar.style.width = '95%';
+    statusDiv.textContent = '☁️ Streaming 1:1 lossless document to Google Drive...';
+    if (progressBar) progressBar.style.width = '50%';
 
-    const blob = new Blob([finalPdfBytes], { type: 'application/pdf' });
-    
-    const { error: uploadError } = await supabaseClient.storage
-      .from(STORAGE_BUCKET)
-      .upload(storagePath, blob, { upsert: true });
+    const base64Data = arrayBufferToBase64(finalPdfBytes);
 
-    if (uploadError) throw uploadError;
+    const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        fileName: `${subjectId}_${Date.now()}.pdf`,
+        mimeType: 'application/pdf',
+        fileData: base64Data
+      })
+    });
 
+    const result = await response.json();
+
+    if (result.status !== 'success') {
+      throw new Error(result.message || 'Failed to upload document to Google Drive.');
+    }
+
+    if (progressBar) progressBar.style.width = '85%';
+
+    // Dual Sync: Update hierarchy_nodes table
     await supabaseClient
-      .from('subjects')
-      .update({ total_pages: finalPageCount, last_updated: new Date() })
+      .from('hierarchy_nodes')
+      .update({ 
+        pdf_storage_path: result.directUrl, 
+        total_pages: finalPageCount
+      })
       .eq('id', subjectId);
+
+    // Dual Sync: Update subjects table
+    const { error: dbError } = await supabaseClient
+      .from('subjects')
+      .update({ 
+        pdf_storage_path: result.directUrl, 
+        total_pages: finalPageCount, 
+        last_updated: new Date() 
+      })
+      .eq('id', subjectId);
+
+    if (dbError) throw dbError;
 
     if (progressBar) progressBar.style.width = '100%';
     statusDiv.style.color = 'var(--success)';
-    statusDiv.textContent = `✅ Success! PDF optimized & saved (${qualityMode.toUpperCase()} Mode). Total pages: ${finalPageCount}`;
+    statusDiv.textContent = `✅ Success! PDF saved directly to Google Drive (${finalPageCount} pages total).`;
     fileInput.value = '';
+
+    await fetchStreamsAndSubjects();
   } catch (error) {
     console.error(error);
     statusDiv.style.color = 'var(--danger)';
@@ -929,7 +959,7 @@ async function removeSubjectFromStudent(enrollmentId, subjectId) {
     console.error("Delete error:", error);
   } else {
     await renderStudentEnrolledCourses(activeStudentId);
-    await loadAddableSubjects(); // Refresh dynamic picklist state
+    await loadAddableSubjects();
   }
 }
 
@@ -1020,7 +1050,6 @@ async function loadAddableSubjects() {
     return;
   }
 
-  // Fetch currently enrolled subject IDs for active student to display status
   const { data: existingCourses } = await supabaseClient
     .from('student_courses')
     .select('subject_id')
@@ -1052,7 +1081,7 @@ async function loadAddableSubjects() {
 
     item.innerHTML = `
       <div class="picklist-title">
-        <b>${subject.subject_name}</b>
+        <b>${subject.subject_name || subject.node_name}</b>
         <span class="picklist-tag">${tagInfo} | NPR ${subject.price_npr || 0}</span>
       </div>
       <button type="button" 
@@ -1093,7 +1122,7 @@ async function addSubjectToSelectedStudent(subjectId) {
     alert(`Error adding subject: ${error.message}`);
   } else {
     await renderStudentEnrolledCourses(activeStudentId);
-    await loadAddableSubjects(); // Refresh picklist UI button status
+    await loadAddableSubjects();
   }
 }
 
@@ -1146,7 +1175,6 @@ async function handleAdminLogin(event) {
   }
 }
 
-// Fetch and render feedback list inside the Admin Panel
 async function fetchAndRenderFeedback() {
   const container = document.getElementById('admin-feedback-list');
   if (!container) return;

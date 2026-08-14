@@ -379,3 +379,21 @@ button:hover, .btn:hover {
     text-align: center;
   }
 }
+
+@keyframes pulseSlide {
+  0% {
+    left: -40%;
+  }
+  50% {
+    left: 100%;
+  }
+  100% {
+    left: -40%;
+  }
+}
+
+.pulse-loader {
+  position: absolute;
+  top: 0;
+  left: -40%;
+}

@@ -1237,7 +1237,14 @@ canvas {
 }
 
 
-
+/* Hide Zoom Controls on Mobile Devices */
+@media (max-width: 768px) {
+  #zoom-in-btn,
+  #zoom-out-btn,
+  #zoom-label {
+    display: none !important;
+  }
+}
 
 
 

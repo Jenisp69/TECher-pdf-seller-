@@ -39,7 +39,6 @@ function getGoogleDriveId(urlOrId) {
   let activeSubjectId = 'default_subject';
 
   // --- Gestures & UI Timers ---
-  let initialPinchDistance = null;
   let initialZoomMultiplier = 1.0;
   let toolbarTimer = null;
   let pageObserver = null;
@@ -239,7 +238,6 @@ window.initReader = async function (sessionData) {
 
     await loadNextBatch(); 
     setupPageObserver();
-    setupTouchPinchZoom();
     initToolbarToggle(); // (This contains the click-to-hide fix we did earlier!)
 
     if (isChunkedDriveFormat) preloadRemainingChunks();
@@ -532,61 +530,7 @@ function setupPageObserver() {
 
 
 
-  /* ==========================================
-     PINCH & ZOOM GESTURE ENGINE
-     ========================================== */
-  function setupTouchPinchZoom() {
-    const readerSection = document.getElementById('reader-section');
-    if (!readerSection) return;
 
-    const isMobileTouch =
-      ('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth <= 768;
-
-    if (!isMobileTouch) return;
-
-    function getDistance(touch1, touch2) {
-      const dx = touch1.clientX - touch2.clientX;
-      const dy = touch1.clientY - touch2.clientY;
-      return Math.hypot(dx, dy);
-    }
-
-    readerSection.addEventListener(
-      'touchstart',
-      (e) => {
-        if (e.touches.length === 2 && !isPenActive) {
-          initialPinchDistance = getDistance(e.touches[0], e.touches[1]);
-          initialZoomMultiplier = zoomMultiplier;
-        }
-      },
-      { passive: true }
-    );
-
-    readerSection.addEventListener(
-      'touchmove',
-      (e) => {
-        if (e.touches.length === 2 && initialPinchDistance && !isPenActive) {
-          if (e.cancelable) e.preventDefault();
-
-          const currentDistance = getDistance(e.touches[0], e.touches[1]);
-          const factor = currentDistance / initialPinchDistance;
-          const newMultiplier = Math.min(Math.max(initialZoomMultiplier * factor, 0.5), 3.0);
-
-          if (Math.abs(newMultiplier - zoomMultiplier) > 0.05) {
-            zoomMultiplier = newMultiplier;
-            updateZoomLabel();
-          }
-        }
-      },
-      { passive: false }
-    );
-
-    readerSection.addEventListener('touchend', async (e) => {
-      if (initialPinchDistance !== null && e.touches.length < 2) {
-        initialPinchDistance = null;
-        await reRenderLoadedPages();
-      }
-    });
-  }
 
   function updateZoomLabel() {
     const zoomLabel = document.getElementById('zoom-label');

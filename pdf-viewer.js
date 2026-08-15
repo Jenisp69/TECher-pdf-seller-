@@ -451,71 +451,52 @@ function getGoogleDriveId(urlOrId) {
     }
   }
 
-
-
 /* ==========================================
-     INFINITE SCROLL OBSERVER
-     ========================================== */
-  let infiniteScrollObserver = null;
+   INFINITE SCROLL & PAGE OBSERVER
+   ========================================== */
+function setupPageObserver() {
+  if (pageObserver) pageObserver.disconnect();
 
-  function setupInfiniteScroll() {
-    const loadMoreContainer = document.getElementById('load-more-container');
-    if (!loadMoreContainer) return;
+  pageObserver = new IntersectionObserver(
+    (entries) => {
+      entries.forEach(async (entry) => {
+        const wrapper = entry.target;
+        const pageNum = parseInt(wrapper.dataset.pageNum, 10);
 
-    if (infiniteScrollObserver) infiniteScrollObserver.disconnect();
-
-    infiniteScrollObserver = new IntersectionObserver(async (entries) => {
-      const entry = entries[0];
-      
-      // Pre-fetch margin: Trigger when container is within 1500px of viewport
-      if (entry.isIntersecting && !isLoadingBatch && currentlyLoadedPage < totalPagesCount) {
-        await loadNextBatch();
-        setupPageObserver(); 
-      }
-    }, {
-      root: null, 
-      rootMargin: '1500px 0px 1500px 0px', 
-      threshold: 0
-    });
-
-    infiniteScrollObserver.observe(loadMoreContainer);
-  }
-
-
-  function setupPageObserver() {
-    if (pageObserver) pageObserver.disconnect();
-
-    pageObserver = new IntersectionObserver(
-      (entries) => {
-        entries.forEach(async (entry) => {
-          const wrapper = entry.target;
-          const pageNum = parseInt(wrapper.dataset.pageNum, 10);
-
-          if (entry.isIntersecting) {
-            if (wrapper.dataset.rendered === 'false') {
-              await renderSinglePage(pageNum, wrapper);
-            }
-
-            const pageInput = document.getElementById('page-jump-input');
-            if (pageInput && document.activeElement !== pageInput) {
-              pageInput.value = pageNum;
-            }
-          } else {
-            if (isLowEndMobile && wrapper.dataset.rendered === 'true') {
-              unloadOffscreenCanvas(wrapper);
-            }
+        if (entry.isIntersecting) {
+          if (wrapper.dataset.rendered === 'false') {
+            await renderSinglePage(pageNum, wrapper);
           }
-        });
-      },
-      {
-        root: null,
-        rootMargin: '300px 0px 300px 0px',
-        threshold: 0,
-      }
-    );
 
-    document.querySelectorAll('.page-wrapper').forEach((p) => pageObserver.observe(p));
-  }
+          const pageInput = document.getElementById('page-jump-input');
+          if (pageInput && document.activeElement !== pageInput) {
+            pageInput.value = pageNum;
+          }
+
+          // --- 5-PAGE INFINITE SCROLL TRIGGER ---
+          // Automatically trigger loading the next batch when reader reaches within 5 pages of the end
+          if (!isLoadingBatch && currentlyLoadedPage < totalPagesCount && (currentlyLoadedPage - pageNum <= 8)) {
+            await loadNextBatch();
+            setupPageObserver();
+          }
+        } else {
+          if (isLowEndMobile && wrapper.dataset.rendered === 'true') {
+            unloadOffscreenCanvas(wrapper);
+          }
+        }
+      });
+    },
+    {
+      root: null,
+      rootMargin: '300px 0px 300px 0px',
+      threshold: 0,
+    }
+  );
+
+  document.querySelectorAll('.page-wrapper').forEach((p) => pageObserver.observe(p));
+}
+
+
 
   /* ==========================================
      PINCH & ZOOM GESTURE ENGINE

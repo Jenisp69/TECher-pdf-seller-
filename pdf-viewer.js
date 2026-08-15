@@ -105,71 +105,117 @@ function getGoogleDriveId(urlOrId) {
   /* ==========================================
      INITIALIZATION & PDF LOADING (CACHE-AWARE)
      ========================================== */
+/* ==========================================
+     INITIALIZATION & PDF LOADING (CACHE & LEGACY AWARE)
+     ========================================== */
   window.initReader = async function (sessionData) {
-  const viewerContainer = document.getElementById('viewer-container');
-  if (!viewerContainer || !sessionData || !sessionData.pdfPath) return;
+    const viewerContainer = document.getElementById('viewer-container');
+    if (!viewerContainer || !sessionData || !sessionData.pdfPath) return;
 
-  currentlyLoadedPage = 0;
-  isLoadingBatch = false;
-  zoomMultiplier = 1.0;
-  activeSubjectId = sessionData.subjectName || 'course_doc';
-  documentChunks = [];
+    currentlyLoadedPage = 0;
+    isLoadingBatch = false;
+    zoomMultiplier = 1.0;
+    activeSubjectId = sessionData.subjectName || 'course_doc';
+    documentChunks = [];
 
-  try {
-    // 1. Parse the chunk map from the database string (e.g. "id1:10,id2:10,id3:4")
-    const chunksData = sessionData.pdfPath.split(',');
-    let currentStartPage = 1;
+    try {
+      // Determine if the path is a new chunked Drive string (e.g., "id1:10,id2:5") or a legacy Supabase path
+      const isChunkedDriveFormat = sessionData.pdfPath.includes(':');
 
-    documentChunks = chunksData.map(chunkStr => {
-      const [id, pagesStr] = chunkStr.split(':');
-      const pagesCount = parseInt(pagesStr, 10);
-      const chunkObj = {
-        fileId: id,
-        startPage: currentStartPage,
-        endPage: currentStartPage + pagesCount - 1,
-        pageCount: pagesCount,
-        docInstance: null,
-        isFetching: false
-      };
-      currentStartPage += pagesCount;
-      return chunkObj;
-    });
+      if (!isChunkedDriveFormat) {
+        // --- LEGACY SUPABASE ROUTE ---
+        viewerContainer.innerHTML = '<p style="text-align:center; padding: 40px; color: var(--text-muted);">⏳ Fetching legacy secure document from Supabase...</p>';
+        
+        const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
+        const { data: blobData, error: downloadError } = await supabaseClient.storage
+          .from(bucketName)
+          .download(sessionData.pdfPath);
 
-    totalPagesCount = currentStartPage - 1;
-    setTotalPages(totalPagesCount);
+        if (downloadError || !blobData) {
+          throw new Error(downloadError ? downloadError.message : 'Failed to fetch secure document stream from Supabase.');
+        }
 
-    // 2. Instantly load ONLY the first chunk (Pages 1-10)
-    viewerContainer.innerHTML = '<p style="text-align:center; padding: 40px; color: var(--text-muted);">⚡ Instantly fetching first 10 pages...</p>';
-    await fetchAndLoadChunk(documentChunks[0]);
+        const arrayBuffer = await blobData.arrayBuffer();
+        
+        // Initialize the monolithic PDF
+        const loadingTask = pdfjsLib.getDocument({
+          data: arrayBuffer.slice(0),
+          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+          cMapPacked: true,
+        });
 
-    viewerContainer.innerHTML = '';
-    const firstPage = await documentChunks[0].docInstance.getPage(1);
-    const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
-    const containerWidth = Math.min(viewerContainer.clientWidth || window.innerWidth, window.innerWidth);
-    baseFitScale = containerWidth / unscaledViewport.width;
-    firstPage.cleanup();
+        const docInstance = await loadingTask.promise;
+        totalPagesCount = docInstance.numPages;
+        setTotalPages(totalPagesCount);
 
-    const pagesList = document.createElement('div');
-    pagesList.id = 'pdf-pages-list';
-    pagesList.style.width = '100%';
-    viewerContainer.appendChild(pagesList);
+        // Package the entire legacy PDF as a single "chunk" so the new renderer handles it natively
+        documentChunks = [{
+          fileId: 'legacy_supabase',
+          startPage: 1,
+          endPage: totalPagesCount,
+          pageCount: totalPagesCount,
+          docInstance: docInstance,
+          isFetching: false
+        }];
 
-    const loadMoreContainer = document.createElement('div');
-    loadMoreContainer.id = 'load-more-container';
-    viewerContainer.appendChild(loadMoreContainer);
+      } else {
+        // --- NEW GOOGLE DRIVE CHUNKED ROUTE ---
+        const chunksData = sessionData.pdfPath.split(',');
+        let currentStartPage = 1;
 
-    await loadNextBatch(); // Renders the first UI batch
-    setupPageObserver();
-    setupTouchPinchZoom();
+        documentChunks = chunksData.map(chunkStr => {
+          const [id, pagesStr] = chunkStr.split(':');
+          const pagesCount = parseInt(pagesStr, 10);
+          const chunkObj = {
+            fileId: id,
+            startPage: currentStartPage,
+            endPage: currentStartPage + pagesCount - 1,
+            pageCount: pagesCount,
+            docInstance: null,
+            isFetching: false
+          };
+          currentStartPage += pagesCount;
+          return chunkObj;
+        });
 
-    // 3. Initiate silent background prefetching for the remaining document chunks
-    preloadRemainingChunks();
+        totalPagesCount = currentStartPage - 1;
+        setTotalPages(totalPagesCount);
 
-  } catch (err) {
-    console.error('PDF Init Error:', err);
-    viewerContainer.innerHTML = `<p style="color:red; text-align:center;">Failed to load document: ${err.message}</p>`;
-  }
-};
+        viewerContainer.innerHTML = '<p style="text-align:center; padding: 40px; color: var(--text-muted);">⚡ Instantly fetching first 10 pages...</p>';
+        await fetchAndLoadChunk(documentChunks[0]);
+      }
+
+      // --- SHARED UI INITIALIZATION ---
+      viewerContainer.innerHTML = '';
+      const firstPage = await documentChunks[0].docInstance.getPage(1);
+      const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
+      const containerWidth = Math.min(viewerContainer.clientWidth || window.innerWidth, window.innerWidth);
+      baseFitScale = containerWidth / unscaledViewport.width;
+      firstPage.cleanup();
+
+      const pagesList = document.createElement('div');
+      pagesList.id = 'pdf-pages-list';
+      pagesList.style.width = '100%';
+      viewerContainer.appendChild(pagesList);
+
+      const loadMoreContainer = document.createElement('div');
+      loadMoreContainer.id = 'load-more-container';
+      viewerContainer.appendChild(loadMoreContainer);
+
+      await loadNextBatch(); // Renders the first UI batch
+      setupPageObserver();
+      setupTouchPinchZoom();
+
+      // Initiate silent background prefetching for remaining Drive chunks (bypassed for single-chunk Supabase files)
+      if (isChunkedDriveFormat) {
+        preloadRemainingChunks();
+      }
+
+    } catch (err) {
+      console.error('PDF Init Error:', err);
+      viewerContainer.innerHTML = `<p style="color:red; text-align:center;">Failed to load document: ${err.message}</p>`;
+    }
+  };
 
 
 // Background worker to silently load the rest of the file
@@ -404,6 +450,37 @@ function getGoogleDriveId(urlOrId) {
       wrapper.dataset.rendered = 'false';
     }
   }
+
+
+
+/* ==========================================
+     INFINITE SCROLL OBSERVER
+     ========================================== */
+  let infiniteScrollObserver = null;
+
+  function setupInfiniteScroll() {
+    const loadMoreContainer = document.getElementById('load-more-container');
+    if (!loadMoreContainer) return;
+
+    if (infiniteScrollObserver) infiniteScrollObserver.disconnect();
+
+    infiniteScrollObserver = new IntersectionObserver(async (entries) => {
+      const entry = entries[0];
+      
+      // Pre-fetch margin: Trigger when container is within 1500px of viewport
+      if (entry.isIntersecting && !isLoadingBatch && currentlyLoadedPage < totalPagesCount) {
+        await loadNextBatch();
+        setupPageObserver(); 
+      }
+    }, {
+      root: null, 
+      rootMargin: '1500px 0px 1500px 0px', 
+      threshold: 0
+    });
+
+    infiniteScrollObserver.observe(loadMoreContainer);
+  }
+
 
   function setupPageObserver() {
     if (pageObserver) pageObserver.disconnect();

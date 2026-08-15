@@ -1,6 +1,22 @@
 /* ==========================================
    ADVANCED INTERACTIVE PDF ENGINE (VRAM OPTIMIZED)
    ========================================== */
+// --- Helper: Extract Genuine Google Drive File ID ---
+function getGoogleDriveId(urlOrId) {
+  if (!urlOrId) return null;
+
+  // Extract /d/FILE_ID or id=FILE_ID
+  const match = urlOrId.match(/(?:\/d\/|id=|\/file\/d\/|^)([a-zA-Z0-9_-]{25,50})/);
+  if (!match) return null;
+
+  const candidate = match[1];
+
+  // Ignore Google Apps Script Deployment IDs (which start with 'AKfy')
+  if (candidate.startsWith('AKfy')) return null;
+
+  return candidate;
+}
+
 
 (() => {
   'use strict';
@@ -14,6 +30,7 @@
   let totalPagesCount = 0;
   let currentlyLoadedPage = 0;
   let isLoadingBatch = false;
+  let documentChunks = []; 
 
   // --- Layout & View Settings ---
   let baseFitScale = 1.0;
@@ -66,6 +83,7 @@
     if (!strokes.length) return;
 
     const dpr = window.devicePixelRatio || 1;
+  
     ctx.strokeStyle = '#ff3366';
     ctx.lineWidth = 3 * dpr;
     ctx.lineCap = 'round';
@@ -83,291 +101,120 @@
     });
   }
 
-  /* ==========================================
-     STREAMING FETCH HELPER
-     ========================================== */
-  async function fetchStreamWithProgress(url, statusCallback, statusPrefix = '⏳ Downloading') {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const contentLength = response.headers.get('content-length');
-    const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-    const reader = response.body.getReader();
-    let receivedLength = 0;
-    const chunks = [];
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      receivedLength += value.length;
-
-      const mbReceived = (receivedLength / (1024 * 1024)).toFixed(1);
-      const mbTotal = totalBytes ? (totalBytes / (1024 * 1024)).toFixed(1) : null;
-      const calculatedPct = totalBytes ? Math.min(80, Math.round((receivedLength / totalBytes) * 70) + 15) : null;
-
-      statusCallback(
-        mbTotal
-          ? `${statusPrefix}: ${mbReceived} MB / ${mbTotal} MB...`
-          : `${statusPrefix}: ${mbReceived} MB...`,
-        calculatedPct
-      );
-    }
-
-    const concatenated = new Uint8Array(receivedLength);
-    let position = 0;
-    for (const chunk of chunks) {
-      concatenated.set(chunk, position);
-      position += chunk.length;
-    }
-    return concatenated;
-  }
-
-  /* ==========================================
-     BACKGROUND SPECULATIVE PRELOAD ENGINE
-     ========================================== */
-  const pdfBufferCache = new Map();
-
-  /**
-   * Background fetcher that streams document binary into RAM before user clicks.
-   */
-  async function preloadDocumentPayload(subjectId, pdfPath) {
-    if (!pdfPath || pdfBufferCache.has(subjectId)) return;
-
-    try {
-      const driveMatch = pdfPath.match(/[-_a-zA-Z0-9]{25,}/);
-      let arrayBuffer = null;
-
-      if (pdfPath.startsWith('http') && driveMatch && typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') {
-        const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${driveMatch[0]}`;
-        const response = await fetch(proxyUrl);
-        if (!response.ok) return;
-
-        const rawTextBytes = await response.arrayBuffer();
-        const base64String = new TextDecoder().decode(rawTextBytes).trim();
-
-        if (!base64String.startsWith('ERROR:')) {
-          const dataUrl = `data:application/pdf;base64,${base64String}`;
-          const blobRes = await fetch(dataUrl);
-          arrayBuffer = await blobRes.arrayBuffer();
-        }
-      } else if (pdfPath.startsWith('http')) {
-        const res = await fetch(pdfPath);
-        if (res.ok) arrayBuffer = await res.arrayBuffer();
-      } else {
-        const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
-        const { data: blobData } = await supabaseClient.storage.from(bucketName).download(pdfPath);
-        if (blobData) arrayBuffer = await blobData.arrayBuffer();
-      }
-
-      if (arrayBuffer) {
-        pdfBufferCache.set(subjectId, arrayBuffer);
-        console.log(`⚡ [Preload Complete] Payload cached for subject: ${subjectId}`);
-      }
-    } catch (err) {
-      console.warn(`[Background Preload Non-Fatal Error] ${subjectId}:`, err);
-    }
-  }
-
-  /**
-   * Hook to call as soon as student logs in or course list renders.
-   */
-  window.preloadAllStudentCourses = function (enrolledSubjects) {
-    if (!Array.isArray(enrolledSubjects)) return;
-
-    // Stagger requests slightly to prevent browser socket starvation
-    enrolledSubjects.forEach((sub, index) => {
-      if (sub.pdf_storage_path) {
-        setTimeout(() => {
-          preloadDocumentPayload(sub.id, sub.pdf_storage_path);
-        }, index * 800);
-      }
-    });
-  };
 
   /* ==========================================
      INITIALIZATION & PDF LOADING (CACHE-AWARE)
      ========================================== */
   window.initReader = async function (sessionData) {
-    const viewerContainer = document.getElementById('viewer-container');
-    if (!viewerContainer) return;
+  const viewerContainer = document.getElementById('viewer-container');
+  if (!viewerContainer || !sessionData || !sessionData.pdfPath) return;
 
-    currentlyLoadedPage = 0;
-    isLoadingBatch = false;
-    zoomMultiplier = 1.0;
-    updateZoomLabel();
+  currentlyLoadedPage = 0;
+  isLoadingBatch = false;
+  zoomMultiplier = 1.0;
+  activeSubjectId = sessionData.subjectName || 'course_doc';
+  documentChunks = [];
 
-    activeSubjectId = sessionData?.subjectName || 'course_doc';
+  try {
+    // 1. Parse the chunk map from the database string (e.g. "id1:10,id2:10,id3:4")
+    const chunksData = sessionData.pdfPath.split(',');
+    let currentStartPage = 1;
 
-    // --- Dynamic Dynamic Progress Bar Controller ---
-    let currentPercent = 5;
-    let targetPercent = 10;
-    let progressInterval = null;
-    let lastText = '';
+    documentChunks = chunksData.map(chunkStr => {
+      const [id, pagesStr] = chunkStr.split(':');
+      const pagesCount = parseInt(pagesStr, 10);
+      const chunkObj = {
+        fileId: id,
+        startPage: currentStartPage,
+        endPage: currentStartPage + pagesCount - 1,
+        pageCount: pagesCount,
+        docInstance: null,
+        isFetching: false
+      };
+      currentStartPage += pagesCount;
+      return chunkObj;
+    });
 
-    const renderStatus = (text, percent) => {
-      viewerContainer.innerHTML = `
-        <div style="text-align:center; padding:40px 20px;">
-          <p style="color:var(--text-muted, #a0aec0); font-size: 0.95rem; margin:0;">${text}</p>
-          <div style="width: 80%; max-width: 320px; height: 6px; background: rgba(255,255,255,0.1); border-radius: 4px; margin: 14px auto 0 auto; overflow: hidden;">
-            <div style="width: ${percent}%; height: 100%; background: var(--accent, #007bff); transition: width 0.25s ease-out;"></div>
-          </div>
-        </div>`;
-    };
+    totalPagesCount = currentStartPage - 1;
+    setTotalPages(totalPagesCount);
 
-    const startProgressLoop = () => {
-      if (progressInterval) clearInterval(progressInterval);
-      progressInterval = setInterval(() => {
-        if (currentPercent < targetPercent) {
-          currentPercent += Math.max(0.3, (targetPercent - currentPercent) * 0.15);
-        } else if (targetPercent < 88) {
-          // Continuous, natural crawl while waiting on slow network/proxy responses
-          currentPercent += (88 - currentPercent) * 0.02 + 0.1;
-        }
-        renderStatus(lastText, Math.min(Math.round(currentPercent), 99));
-      }, 150);
-    };
+    // 2. Instantly load ONLY the first chunk (Pages 1-10)
+    viewerContainer.innerHTML = '<p style="text-align:center; padding: 40px; color: var(--text-muted);">⚡ Instantly fetching first 10 pages...</p>';
+    await fetchAndLoadChunk(documentChunks[0]);
 
-    const updateStatus = (text, forcedPercent = null) => {
-      lastText = text;
-      if (forcedPercent !== null) {
-        targetPercent = Math.max(targetPercent, forcedPercent);
-      }
-      if (!progressInterval) startProgressLoop();
-    };
+    viewerContainer.innerHTML = '';
+    const firstPage = await documentChunks[0].docInstance.getPage(1);
+    const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
+    const containerWidth = Math.min(viewerContainer.clientWidth || window.innerWidth, window.innerWidth);
+    baseFitScale = containerWidth / unscaledViewport.width;
+    firstPage.cleanup();
 
-    const stopProgressLoop = () => {
-      if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
-      }
-    };
+    const pagesList = document.createElement('div');
+    pagesList.id = 'pdf-pages-list';
+    pagesList.style.width = '100%';
+    viewerContainer.appendChild(pagesList);
 
-    if (!sessionData || !sessionData.pdfPath) {
-      showError('No document path provided.');
-      return;
+    const loadMoreContainer = document.createElement('div');
+    loadMoreContainer.id = 'load-more-container';
+    viewerContainer.appendChild(loadMoreContainer);
+
+    await loadNextBatch(); // Renders the first UI batch
+    setupPageObserver();
+    setupTouchPinchZoom();
+
+    // 3. Initiate silent background prefetching for the remaining document chunks
+    preloadRemainingChunks();
+
+  } catch (err) {
+    console.error('PDF Init Error:', err);
+    viewerContainer.innerHTML = `<p style="color:red; text-align:center;">Failed to load document: ${err.message}</p>`;
+  }
+};
+
+
+// Background worker to silently load the rest of the file
+  async function preloadRemainingChunks() {
+    for (let i = 1; i < documentChunks.length; i++) {
+      await fetchAndLoadChunk(documentChunks[i]);
     }
+  }
+
+  // Network fetcher that resolves a chunk ID via the Apps Script Proxy
+  async function fetchAndLoadChunk(chunk) {
+    if (chunk.docInstance || chunk.isFetching) return;
+    chunk.isFetching = true;
 
     try {
-      let arrayBuffer = null;
-      const pdfPath = sessionData.pdfPath;
+      const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${chunk.fileId}`;
+      const response = await fetch(proxyUrl);
+      if (!response.ok) throw new Error('Proxy connection failed.');
+      
+      const resJson = await response.json();
+      if (resJson.status !== 'success') throw new Error('Proxy file fetch failed.');
 
-      // --- CHECK 1: Instant RAM Cache Hit ---
-      if (pdfBufferCache.has(activeSubjectId)) {
-        updateStatus('⚡ Instantly launching cached document payload...', 90);
-        arrayBuffer = pdfBufferCache.get(activeSubjectId);
-      }
-      // --- CHECK 2: Cache Miss -> Stream from Network with Dynamic Progress Bar ---
-      else {
-        updateStatus('⏳ Securing & establishing document stream...', 15);
-        startProgressLoop();
+      const binaryStr = window.atob(resJson.base64Data);
+      const len = binaryStr.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-        const driveMatch = pdfPath ? pdfPath.match(/[-_a-zA-Z0-9]{25,}/) : null;
-
-        if (pdfPath.startsWith('http://') || pdfPath.startsWith('https://')) {
-          if (driveMatch) {
-            const fileId = driveMatch[0];
-            if (typeof GOOGLE_APPS_SCRIPT_URL !== 'undefined') {
-              const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${fileId}`;
-
-              const rawTextBytes = await fetchStreamWithProgress(
-                proxyUrl,
-                (msg, pct) => updateStatus(msg, pct || 45),
-                '⏳ Fetching document payload via proxy'
-              );
-
-              updateStatus('⚡ Decoding binary stream (C++ engine)...', 80);
-              const base64String = new TextDecoder().decode(rawTextBytes).trim();
-
-              if (base64String.startsWith('ERROR:')) {
-                throw new Error(base64String);
-              }
-
-              const dataUrl = `data:application/pdf;base64,${base64String}`;
-              const blobRes = await fetch(dataUrl);
-              arrayBuffer = await blobRes.arrayBuffer();
-            } else {
-              throw new Error('Google Apps Script proxy URL is undefined.');
-            }
-          } else {
-            const concatenated = await fetchStreamWithProgress(
-              pdfPath,
-              (msg, pct) => updateStatus(msg, pct || 50),
-              '⏳ Downloading document stream'
-            );
-            arrayBuffer = concatenated.buffer;
-          }
-        } else {
-          const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
-          const { data: blobData, error: downloadError } = await supabaseClient.storage
-            .from(bucketName)
-            .download(pdfPath);
-
-          if (downloadError || !blobData) {
-            throw new Error(downloadError ? downloadError.message : 'Failed to fetch secure document stream.');
-          }
-          arrayBuffer = await blobData.arrayBuffer();
-        }
-
-        // Cache for subsequent opens
-        pdfBufferCache.set(activeSubjectId, arrayBuffer);
-      }
-
-      updateStatus('🚀 Initializing PDF render worker...', 95);
-
-      // CLONE ArrayBuffer using .slice(0) to prevent worker detachment of cached buffer
       const loadingTask = pdfjsLib.getDocument({
-        data: arrayBuffer.slice(0),
-        disableAutoFetch: true,
-        disableStream: false,
+        data: bytes.buffer,
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+        cMapPacked: true,
       });
-
-      currentPdfDoc = await loadingTask.promise;
-      totalPagesCount = currentPdfDoc.numPages;
-
-      stopProgressLoop();
-      setTotalPages(totalPagesCount);
-      viewerContainer.innerHTML = '';
-
-      const firstPage = await currentPdfDoc.getPage(1);
-      const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
-      const containerWidth = Math.min(viewerContainer.clientWidth || window.innerWidth, window.innerWidth);
-      baseFitScale = containerWidth / unscaledViewport.width;
-      firstPage.cleanup();
-
-      const pagesList = document.createElement('div');
-      pagesList.id = 'pdf-pages-list';
-      pagesList.style.width = '100%';
-      pagesList.style.userSelect = 'none';
-
-      viewerContainer.appendChild(pagesList);
-
-      const loadMoreContainer = document.createElement('div');
-      loadMoreContainer.id = 'load-more-container';
-      loadMoreContainer.style.textAlign = 'center';
-      loadMoreContainer.style.margin = '20px 0 40px 0';
-      viewerContainer.appendChild(loadMoreContainer);
-
-      await loadNextBatch();
-
-      setupPageObserver();
-      setupTouchPinchZoom();
-
-      window.removeEventListener('scroll', handleScrollBatchLoad);
-      window.addEventListener('scroll', handleScrollBatchLoad, { passive: true });
-
-      initToolbarAutoHide();
+      
+      chunk.docInstance = await loadingTask.promise;
     } catch (err) {
-      stopProgressLoop();
-      console.error('PDF render error:', err);
-      showError(`Failed to load document: ${err.message}`);
+      console.warn(`Failed to preload chunk covering pages ${chunk.startPage}-${chunk.endPage}:`, err);
+    } finally {
+      chunk.isFetching = false;
     }
-  };
+  }
+
+
 
   /* ==========================================
-     BATCH PAGE LOADER (ADAPTIVE EXECUTOR)
+     BATCH PAGE LOADER
      ========================================== */
   async function loadNextBatch() {
     if (isLoadingBatch || currentlyLoadedPage >= totalPagesCount) return;
@@ -402,7 +249,6 @@
 
     pagesList?.appendChild(fragment);
 
-    // Adaptive rendering strategy based on device capability
     if (isLowEndMobile) {
       for (const task of renderTasks) {
         await renderSinglePage(task.pageNum, task.wrapper);
@@ -429,14 +275,44 @@
   }
 
   /* ==========================================
-     PAGE RENDERER (VRAM-AWARE)
+     PAGE RENDERER
      ========================================== */
-  async function renderSinglePage(pageNum, wrapper) {
-    if (wrapper.dataset.rendered === 'true' && wrapper.querySelector('canvas')) return;
+/* ==========================================
+     PAGE RENDERER (RACE-CONDITION PATCHED)
+     ========================================== */
+  async function renderSinglePage(globalPageNum, wrapper) {
+    // 1. Lock to prevent async race conditions (Stops duplicated stacked pages)
+    if (wrapper.dataset.rendered === 'true' || wrapper.dataset.isRendering === 'true') return;
+    wrapper.dataset.isRendering = 'true';
 
     try {
+      // 2. Clear out any artifacts (duplicate canvases, note buttons) from previous renders
       wrapper.innerHTML = '';
-      const page = await currentPdfDoc.getPage(pageNum);
+
+      // 3. Locate which physical chunk holds this logical page
+      const chunk = documentChunks.find(c => globalPageNum >= c.startPage && globalPageNum <= c.endPage);
+      
+      if (!chunk) return;
+
+      // 4. Wait for background load if user scrolls faster than preload
+      if (!chunk.docInstance) {
+        wrapper.innerHTML = `<p style="text-align:center; padding:50px; color:var(--text-muted);">Fetching page ${globalPageNum} data...</p>`;
+        
+        // STABILITY FIX: If another page in this chunk triggered the download, wait for it!
+        while (chunk.isFetching) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+
+        // If it still hasn't loaded after waiting, trigger the fetch
+        if (!chunk.docInstance) {
+          await fetchAndLoadChunk(chunk);
+        }
+        wrapper.innerHTML = ''; 
+      }
+
+      // 5. Map global page (e.g. 15) to local chunk page (e.g. 5)
+      const localPageNum = (globalPageNum - chunk.startPage) + 1;
+      const page = await chunk.docInstance.getPage(localPageNum);
 
       const dpr = window.devicePixelRatio || 1;
       const effectiveScale = baseFitScale * zoomMultiplier;
@@ -445,7 +321,7 @@
       wrapper.style.width = `${viewport.width}px`;
       wrapper.style.minHeight = `${viewport.height}px`;
 
-      // 1. PDF Render Canvas
+      // 6. Standard UI Canvas Generation
       const pdfCanvas = document.createElement('canvas');
       const context = pdfCanvas.getContext('2d', { alpha: false });
 
@@ -459,24 +335,20 @@
       pdfCanvas.oncontextmenu = () => false;
       wrapper.appendChild(pdfCanvas);
 
-      // 2. Drawing Overlay Canvas
+      // 7. Draw overlay & setup notes
       const drawCanvas = document.createElement('canvas');
       drawCanvas.className = 'draw-overlay';
       drawCanvas.width = viewport.width * dpr;
       drawCanvas.height = viewport.height * dpr;
-      drawCanvas.style.position = 'absolute';
-      drawCanvas.style.top = '0';
-      drawCanvas.style.left = '0';
-      drawCanvas.style.width = '100%';
-      drawCanvas.style.height = '100%';
-      drawCanvas.style.pointerEvents = isPenActive ? 'auto' : 'none';
-      drawCanvas.style.cursor = 'crosshair';
-      drawCanvas.style.touchAction = isPenActive ? 'none' : 'auto';
+      Object.assign(drawCanvas.style, {
+        position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+        pointerEvents: isPenActive ? 'auto' : 'none', cursor: 'crosshair', touchAction: isPenActive ? 'none' : 'auto'
+      });
 
       wrapper.appendChild(drawCanvas);
-      attachDrawingEvents(drawCanvas, pageNum);
+      attachDrawingEvents(drawCanvas, globalPageNum);
 
-      // 3. Persistent Page Note UI
+      // 8. Notes UI 
       const noteTrigger = document.createElement('button');
       noteTrigger.className = 'page-note-trigger';
       noteTrigger.innerHTML = `<i class="fa-solid fa-note-sticky"></i> Note`;
@@ -485,9 +357,9 @@
       notePanel.className = 'page-note-panel hidden';
 
       const noteBox = document.createElement('textarea');
-      noteBox.placeholder = `📝 Page ${pageNum} note...`;
+      noteBox.placeholder = `📝 Page ${globalPageNum} note...`;
 
-      const noteKey = `note_${activeSubjectId}_p${pageNum}`;
+      const noteKey = `note_${activeSubjectId}_p${globalPageNum}`;
       noteBox.value = localStorage.getItem(noteKey) || '';
 
       noteBox.addEventListener('input', (e) => {
@@ -506,9 +378,15 @@
 
       await page.render({ canvasContext: context, viewport }).promise;
       page.cleanup();
+      
       wrapper.dataset.rendered = 'true';
+
     } catch (err) {
-      console.error(`Error rendering page ${pageNum}:`, err);
+      console.error(`Error rendering global page ${globalPageNum}:`, err);
+      wrapper.innerHTML = `<p style="color:red; text-align:center;">Failed to render page ${globalPageNum}</p>`;
+    } finally {
+      // 9. Always unlock the element, even if rendering fails!
+      wrapper.dataset.isRendering = 'false';
     }
   }
 
@@ -519,7 +397,7 @@
     const canvases = wrapper.querySelectorAll('canvas');
     if (canvases.length > 0) {
       canvases.forEach((canvas) => {
-        canvas.width = 0; // Release VRAM allocation instantly
+        canvas.width = 0;
         canvas.height = 0;
         canvas.remove();
       });
@@ -537,7 +415,6 @@
           const pageNum = parseInt(wrapper.dataset.pageNum, 10);
 
           if (entry.isIntersecting) {
-            // Re-render canvas if unloaded by VRAM garbage collector
             if (wrapper.dataset.rendered === 'false') {
               await renderSinglePage(pageNum, wrapper);
             }
@@ -547,7 +424,6 @@
               pageInput.value = pageNum;
             }
           } else {
-            // Unload canvas from DOM if page is far off-screen on low-end hardware
             if (isLowEndMobile && wrapper.dataset.rendered === 'true') {
               unloadOffscreenCanvas(wrapper);
             }
@@ -648,7 +524,7 @@
   }
 
   /* ==========================================
-     DRAWING ENGINE (RAF OPTIMIZED)
+     DRAWING ENGINE
      ========================================== */
   function attachDrawingEvents(canvas, pageNum) {
     const ctx = canvas.getContext('2d');

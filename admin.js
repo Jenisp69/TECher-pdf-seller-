@@ -681,7 +681,7 @@ document.getElementById('account-form')?.addEventListener('submit', async (e) =>
 });
 
 /* ==========================================
-   DIRECT GOOGLE DRIVE PDF UPLOAD & APPEND PIPELINE
+   DIRECT GOOGLE DRIVE CHUNKED UPLOAD PIPELINE
    ========================================== */
 
 async function handleDocumentUpdate(qualityMode = 'auto') {
@@ -692,175 +692,136 @@ async function handleDocumentUpdate(qualityMode = 'auto') {
   const progressContainer = document.getElementById('progress-container');
   const progressBar = document.getElementById('progress-bar');
 
-  if (!subjectId) {
-    alert('Please select a subject first.');
-    return;
-  }
-
-  if (!fileInput.files[0]) {
-    alert('Please select a file to upload first.');
+  if (!subjectId || !fileInput.files[0]) {
+    alert('Please select a subject and a file.');
     return;
   }
 
   const newFile = fileInput.files[0];
-
   statusDiv.style.color = 'var(--text-main)';
-  statusDiv.textContent = `⏳ Processing document (Lossless 1:1 Mode)...`;
+  statusDiv.textContent = `⏳ Pre-processing document for instant-load web view...`;
   if (progressContainer) progressContainer.classList.remove('hidden');
-  if (progressBar) progressBar.style.width = '10%';
+  if (progressBar) progressBar.style.width = '5%';
 
   try {
-    let finalPdfBytes;
-    let finalPageCount = 0;
+    const newFileBuffer = await newFile.arrayBuffer();
+    let sourceDoc;
 
-    if (mode === 'replace') {
-      const newFileBuffer = await newFile.arrayBuffer();
-
-      if (newFile.type === 'application/pdf') {
-        const doc = await PDFLib.PDFDocument.load(newFileBuffer, { ignoreEncryption: true });
-        finalPdfBytes = await doc.save({ useObjectStreams: true });
-        finalPageCount = doc.getPageCount();
-      } else {
-        const doc = await PDFLib.PDFDocument.create();
-        let image;
-        if (newFile.type.includes('jpeg') || newFile.type.includes('jpg')) {
-          image = await doc.embedJpg(newFileBuffer);
-        } else if (newFile.type.includes('png')) {
-          image = await doc.embedPng(newFileBuffer);
-        }
-        const page = doc.addPage(PDFLib.PageSizes.A4);
-        const { width, height } = page.getSize();
-        const dims = image.scaleToFit(width - 40, height - 40);
-        page.drawImage(image, {
-          x: (width - dims.width) / 2,
-          y: (height - dims.height) / 2,
-          width: dims.width,
-          height: dims.height,
-        });
-        finalPdfBytes = await doc.save({ useObjectStreams: true });
-        finalPageCount = doc.getPageCount();
-      }
-    } 
-    else if (mode === 'append') {
-      const subjectObj = globalSubjects.find(s => s.id === subjectId);
-      const existingPath = subjectObj ? subjectObj.pdf_storage_path : '';
-
-      let mainDoc;
-      const driveMatch = existingPath ? existingPath.match(/[-_a-zA-Z0-9]{25,}/) : null;
-
-      if (driveMatch) {
-        // Safe fetch via Apps Script GET proxy to bypass browser CORS
-        const proxyRes = await fetch(`${GOOGLE_APPS_SCRIPT_URL}?fileId=${driveMatch[0]}`);
-        const proxyJson = await proxyRes.json();
-
-        if (proxyJson.status === 'success') {
-          const binaryStr = window.atob(proxyJson.base64Data);
-          const len = binaryStr.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
-          mainDoc = await PDFLib.PDFDocument.load(bytes.buffer, { ignoreEncryption: true });
-        } else {
-          mainDoc = await PDFLib.PDFDocument.create();
-        }
-      } else if (existingPath && existingPath.startsWith('http')) {
-        const res = await fetch(existingPath);
-        if (res.ok) {
-          const existingBuffer = await res.arrayBuffer();
-          mainDoc = await PDFLib.PDFDocument.load(existingBuffer, { ignoreEncryption: true });
-        } else {
-          mainDoc = await PDFLib.PDFDocument.create();
-        }
-      } else {
-        mainDoc = await PDFLib.PDFDocument.create();
-      }
-
-      const newFileBuffer = await newFile.arrayBuffer();
-
-      if (newFile.type === 'application/pdf') {
-        const newDoc = await PDFLib.PDFDocument.load(newFileBuffer, { ignoreEncryption: true });
-        const copiedPages = await mainDoc.copyPages(newDoc, newDoc.getPageIndices());
-        copiedPages.forEach(page => mainDoc.addPage(page));
-      } else if (newFile.type.includes('image')) {
-        let image;
-        if (newFile.type.includes('jpeg') || newFile.type.includes('jpg')) {
-          image = await mainDoc.embedJpg(newFileBuffer);
-        } else if (newFile.type.includes('png')) {
-          image = await mainDoc.embedPng(newFileBuffer);
-        }
-        const page = mainDoc.addPage(PDFLib.PageSizes.A4);
-        const { width, height } = page.getSize();
-        const dims = image.scaleToFit(width - 40, height - 40);
-        page.drawImage(image, {
-          x: (width - dims.width) / 2,
-          y: (height - dims.height) / 2,
-          width: dims.width,
-          height: dims.height,
-        });
-      }
-
-      finalPageCount = mainDoc.getPageCount();
-      finalPdfBytes = await mainDoc.save({ useObjectStreams: true });
+    // Normalize Images to PDF or load existing PDF
+    if (newFile.type.includes('image')) {
+      sourceDoc = await PDFLib.PDFDocument.create();
+      let image = newFile.type.includes('png') ? await sourceDoc.embedPng(newFileBuffer) : await sourceDoc.embedJpg(newFileBuffer);
+      const page = sourceDoc.addPage(PDFLib.PageSizes.A4);
+      const { width, height } = page.getSize();
+      const dims = image.scaleToFit(width - 40, height - 40);
+      page.drawImage(image, {
+        x: (width - dims.width) / 2,
+        y: (height - dims.height) / 2,
+        width: dims.width,
+        height: dims.height,
+      });
+    } else {
+      sourceDoc = await PDFLib.PDFDocument.load(newFileBuffer, { ignoreEncryption: true });
     }
 
-    statusDiv.textContent = '☁️ Streaming 1:1 lossless document to Google Drive...';
-    if (progressBar) progressBar.style.width = '50%';
+    const totalNewPages = sourceDoc.getPageCount();
+    const CHUNK_SIZE = 10; // First 10 pages load instantly for user
+    const chunkDataArray = [];
 
-    const base64Data = arrayBufferToBase64(finalPdfBytes);
+    // 1. Split PDF into optimized chunks
+    for (let i = 0; i < totalNewPages; i += CHUNK_SIZE) {
+      statusDiv.textContent = `⏳ Segmenting local chunk ${Math.floor(i/CHUNK_SIZE) + 1}...`;
+      const chunkDoc = await PDFLib.PDFDocument.create();
+      const pageIndices = [];
+      for (let j = i; j < Math.min(i + CHUNK_SIZE, totalNewPages); j++) {
+        pageIndices.push(j);
+      }
+      
+      const copiedPages = await chunkDoc.copyPages(sourceDoc, pageIndices);
+      copiedPages.forEach(p => chunkDoc.addPage(p));
+      
+      const chunkBytes = await chunkDoc.save({ useObjectStreams: true });
+      chunkDataArray.push({ bytes: chunkBytes, pages: pageIndices.length });
+    }
 
-    const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({
-        fileName: `${subjectId}_${Date.now()}.pdf`,
+    // 2. Upload chunks sequentially with dynamic progress bar
+    const uploadedChunksRecords = [];
+    for (let i = 0; i < chunkDataArray.length; i++) {
+      const currentProgress = Math.round(((i) / chunkDataArray.length) * 80) + 10;
+      if (progressBar) progressBar.style.width = `${currentProgress}%`;
+      statusDiv.textContent = `☁️ Streaming chunk ${i + 1} of ${chunkDataArray.length} to Google Drive...`;
+
+      const base64Data = arrayBufferToBase64(chunkDataArray[i].bytes);
+      const payload = JSON.stringify({
+        fileName: `${subjectId}_chunk${i+1}_${Date.now()}.pdf`,
         mimeType: 'application/pdf',
         fileData: base64Data
-      })
-    });
+      });
 
-    const result = await response.json();
+      // Use text/plain to bypass CORS Preflight restrictions
+      const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: payload
+      });
 
-    if (result.status !== 'success') {
-      throw new Error(result.message || 'Failed to upload document to Google Drive.');
+      if (!response.ok) throw new Error(`Upload server connection failed (${response.status})`);
+      const result = await response.json();
+      if (result.status !== 'success') throw new Error(result.message || 'Drive upload failed.');
+
+      // Format: "FILE_ID:PAGE_COUNT"
+      uploadedChunksRecords.push(`${result.fileId}:${chunkDataArray[i].pages}`);
     }
 
-    if (progressBar) progressBar.style.width = '85%';
+    if (progressBar) progressBar.style.width = '95%';
+    statusDiv.textContent = `🔄 Syncing document map to database...`;
 
-    // Dual Sync: Update hierarchy_nodes table
-    await supabaseClient
-      .from('hierarchy_nodes')
-      .update({ 
-        pdf_storage_path: result.directUrl, 
-        total_pages: finalPageCount
-      })
-      .eq('id', subjectId);
+    // 3. Dual Sync Database
+    const subjectObj = globalSubjects.find(s => s.id === subjectId);
+    let finalPathData = [];
+    let finalTotalPages = totalNewPages;
 
-    // Dual Sync: Update subjects table
-    const { error: dbError } = await supabaseClient
-      .from('subjects')
-      .update({ 
-        pdf_storage_path: result.directUrl, 
-        total_pages: finalPageCount, 
-        last_updated: new Date() 
-      })
-      .eq('id', subjectId);
+    // If appending, simply add new chunks to the end of the existing chain! (Instant append)
+    if (mode === 'append' && subjectObj && subjectObj.pdf_storage_path) {
+      finalPathData = subjectObj.pdf_storage_path.split(',');
+      finalTotalPages += (subjectObj.total_pages || 0);
+    }
+    
+    finalPathData.push(...uploadedChunksRecords);
+    const secureStorageString = finalPathData.join(','); // e.g. "idA:10,idB:10,idC:2"
 
-    if (dbError) throw dbError;
+    await supabaseClient.from('hierarchy_nodes').update({ 
+      pdf_storage_path: secureStorageString, total_pages: finalTotalPages
+    }).eq('id', subjectId);
+
+    await supabaseClient.from('subjects').update({ 
+      pdf_storage_path: secureStorageString, total_pages: finalTotalPages, last_updated: new Date() 
+    }).eq('id', subjectId);
 
     if (progressBar) progressBar.style.width = '100%';
     statusDiv.style.color = 'var(--success)';
-    statusDiv.textContent = `✅ Success! PDF saved directly to Google Drive (${finalPageCount} pages total).`;
+    statusDiv.textContent = `✅ Success! Document segmented and synced (${finalTotalPages} pages total).`;
     fileInput.value = '';
 
     await fetchStreamsAndSubjects();
   } catch (error) {
     console.error(error);
     statusDiv.style.color = 'var(--danger)';
-    statusDiv.textContent = `❌ Error updating document: ${error.message}`;
+    statusDiv.textContent = `❌ Error: ${error.message}`;
   } finally {
-    setTimeout(() => {
-      if (progressContainer) progressContainer.classList.add('hidden');
-    }, 4000);
+    setTimeout(() => { if (progressContainer) progressContainer.classList.add('hidden'); }, 4000);
   }
+}
+
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  const chunkSize = 0x8000;
+  for (let i = 0; i < len; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return window.btoa(binary);
 }
 
 async function fetchStudents() {
@@ -1210,5 +1171,18 @@ async function fetchAndRenderFeedback() {
     container.appendChild(div);
   });
 }
-
+/* ==========================================
+   EFFICIENT BINARY TO BASE64 CONVERTER
+   ========================================== */
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  const chunkSize = 0x8000; // 32KB chunks prevent CPU freezing
+  
+  for (let i = 0; i < len; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return window.btoa(binary);
+}
 window.addEventListener('DOMContentLoaded', initAdmin);

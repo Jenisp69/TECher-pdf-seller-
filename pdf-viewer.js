@@ -101,121 +101,155 @@ function getGoogleDriveId(urlOrId) {
     });
   }
 
-
-  /* ==========================================
-     INITIALIZATION & PDF LOADING (CACHE-AWARE)
-     ========================================== */
 /* ==========================================
-     INITIALIZATION & PDF LOADING (CACHE & LEGACY AWARE)
-     ========================================== */
-  window.initReader = async function (sessionData) {
-    const viewerContainer = document.getElementById('viewer-container');
-    if (!viewerContainer || !sessionData || !sessionData.pdfPath) return;
+   INITIALIZATION & PDF LOADING 
+   ========================================== */
+window.initReader = async function (sessionData) {
+  const viewerContainer = document.getElementById('viewer-container');
+  if (!viewerContainer || !sessionData || !sessionData.pdfPath) return;
 
-    currentlyLoadedPage = 0;
-    isLoadingBatch = false;
-    zoomMultiplier = 1.0;
-    activeSubjectId = sessionData.subjectName || 'course_doc';
-    documentChunks = [];
+  currentlyLoadedPage = 0;
+  isLoadingBatch = false;
+  zoomMultiplier = 1.0;
+  activeSubjectId = sessionData.subjectName || 'course_doc';
+  documentChunks = [];
 
-    try {
-      // Determine if the path is a new chunked Drive string (e.g., "id1:10,id2:5") or a legacy Supabase path
-      const isChunkedDriveFormat = sessionData.pdfPath.includes(':');
+  // === COOL MINECRAFT LOADER HTML ===
+  const loaderHTML = `
+    <div class="pixel-loader-container">
+      <div class="chicken-stage"><div class="pixel-chicken"></div></div>
+      <div class="pixel-progress-track"><div class="pixel-progress-fill"></div></div>
+      <div class="pixel-loading-text" id="loading-text-anim">Initializing...</div>
+    </div>
+  `;
+  viewerContainer.innerHTML = loaderHTML;
 
-      if (!isChunkedDriveFormat) {
-        // --- LEGACY SUPABASE ROUTE ---
-        viewerContainer.innerHTML = '<p style="text-align:center; padding: 40px; color: var(--text-muted);">⏳ Fetching legacy secure document from Supabase...</p>';
-        
-        const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
-        const { data: blobData, error: downloadError } = await supabaseClient.storage
-          .from(bucketName)
-          .download(sessionData.pdfPath);
+ // === DYNAMIC PROGRESS HELPER WITH AUTOMATED TICKER ===
+  let currentPercent = 5;
+  let stuckTicks = 0;
 
-        if (downloadError || !blobData) {
-          throw new Error(downloadError ? downloadError.message : 'Failed to fetch secure document stream from Supabase.');
-        }
-
-        const arrayBuffer = await blobData.arrayBuffer();
-        
-        // Initialize the monolithic PDF
-        const loadingTask = pdfjsLib.getDocument({
-          data: arrayBuffer.slice(0),
-          cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-          cMapPacked: true,
-        });
-
-        const docInstance = await loadingTask.promise;
-        totalPagesCount = docInstance.numPages;
-        setTotalPages(totalPagesCount);
-
-        // Package the entire legacy PDF as a single "chunk" so the new renderer handles it natively
-        documentChunks = [{
-          fileId: 'legacy_supabase',
-          startPage: 1,
-          endPage: totalPagesCount,
-          pageCount: totalPagesCount,
-          docInstance: docInstance,
-          isFetching: false
-        }];
-
-      } else {
-        // --- NEW GOOGLE DRIVE CHUNKED ROUTE ---
-        const chunksData = sessionData.pdfPath.split(',');
-        let currentStartPage = 1;
-
-        documentChunks = chunksData.map(chunkStr => {
-          const [id, pagesStr] = chunkStr.split(':');
-          const pagesCount = parseInt(pagesStr, 10);
-          const chunkObj = {
-            fileId: id,
-            startPage: currentStartPage,
-            endPage: currentStartPage + pagesCount - 1,
-            pageCount: pagesCount,
-            docInstance: null,
-            isFetching: false
-          };
-          currentStartPage += pagesCount;
-          return chunkObj;
-        });
-
-        totalPagesCount = currentStartPage - 1;
-        setTotalPages(totalPagesCount);
-
-        viewerContainer.innerHTML = '<p style="text-align:center; padding: 40px; color: var(--text-muted);">⚡ Instantly fetching first 10 pages...</p>';
-        await fetchAndLoadChunk(documentChunks[0]);
-      }
-
-      // --- SHARED UI INITIALIZATION ---
-      viewerContainer.innerHTML = '';
-      const firstPage = await documentChunks[0].docInstance.getPage(1);
-      const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
-      const containerWidth = Math.min(viewerContainer.clientWidth || window.innerWidth, window.innerWidth);
-      baseFitScale = containerWidth / unscaledViewport.width;
-      firstPage.cleanup();
-
-      const pagesList = document.createElement('div');
-      pagesList.id = 'pdf-pages-list';
-      pagesList.style.width = '100%';
-      viewerContainer.appendChild(pagesList);
-
-      const loadMoreContainer = document.createElement('div');
-      loadMoreContainer.id = 'load-more-container';
-      viewerContainer.appendChild(loadMoreContainer);
-
-      await loadNextBatch(); // Renders the first UI batch
-      setupPageObserver();
-      setupTouchPinchZoom();
-
-      // Initiate silent background prefetching for remaining Drive chunks (bypassed for single-chunk Supabase files)
-      if (isChunkedDriveFormat) {
-        preloadRemainingChunks();
-      }
-
-    } catch (err) {
-      console.error('PDF Init Error:', err);
-      viewerContainer.innerHTML = `<p style="color:red; text-align:center;">Failed to load document: ${err.message}</p>`;
-    }
+  const updateProgress = (percent, text) => {
+    currentPercent = Math.max(currentPercent, percent); // Ensures bar only moves forward
+    const fill = document.querySelector('.pixel-progress-fill');
+    const textEl = document.getElementById('loading-text-anim');
+    if (fill) fill.style.width = currentPercent + '%';
+    if (textEl && text) textEl.innerText = text;
   };
+
+  // Smooth fake progress tick: Gradually moves up to 60% while waiting for network
+  const progressInterval = setInterval(() => {
+    if (currentPercent < 60) {
+      currentPercent += 3; // Creeps up 3% every 350ms
+      if (currentPercent > 60) currentPercent = 60;
+    } else {
+      // Once it hits 60%, start counting how long we've been waiting for the download
+      stuckTicks++; 
+    }
+
+    // Default progression messages
+    let msg = "Connecting to database...";
+    if (currentPercent >= 20) msg = "Summoning pages...";
+    if (currentPercent >= 40) msg = "Heavy lifting! Hang tight...";
+    
+    // If stuck at 60% for ~3.5s (10 ticks)
+    if (stuckTicks > 10) msg = "Still brewing... large file detected...";
+    
+    // If stuck at 60% for ~7s (20 ticks)
+    if (stuckTicks > 20) msg = "takes less than 15 seconds...";
+
+    // If stuck at 60% for ~10.2s (32 ticks)
+    if (stuckTicks > 32) msg = "Almost done...";
+
+
+    updateProgress(currentPercent, msg);
+  }, 350);
+
+  try {
+    updateProgress(5, "Connecting to database...");
+
+    const isChunkedDriveFormat = sessionData.pdfPath.includes(':');
+    if (!isChunkedDriveFormat) {
+      // --- LEGACY SUPABASE ROUTE ---
+      const bucketName = typeof STORAGE_BUCKET !== 'undefined' ? STORAGE_BUCKET : 'course-notes';
+      const { data: blobData, error: downloadError } = await supabaseClient.storage
+        .from(bucketName).download(sessionData.pdfPath);
+
+      if (downloadError || !blobData) throw new Error(downloadError ? downloadError.message : 'Failed to fetch.');
+
+      const arrayBuffer = await blobData.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({
+        data: arrayBuffer.slice(0),
+        cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
+        cMapPacked: true,
+      });
+
+      const docInstance = await loadingTask.promise;
+      totalPagesCount = docInstance.numPages;
+      setTotalPages(totalPagesCount);
+
+      documentChunks = [{ fileId: 'legacy_supabase', startPage: 1, endPage: totalPagesCount, pageCount: totalPagesCount, docInstance: docInstance, isFetching: false }];
+    
+    } else {
+      // --- NEW GOOGLE DRIVE CHUNKED ROUTE ---
+      const chunksData = sessionData.pdfPath.split(',');
+      let currentStartPage = 1;
+
+      documentChunks = chunksData.map(chunkStr => {
+        const [id, pagesStr] = chunkStr.split(':');
+        const pagesCount = parseInt(pagesStr, 10);
+        const chunkObj = { fileId: id, startPage: currentStartPage, endPage: currentStartPage + pagesCount - 1, pageCount: pagesCount, docInstance: null, isFetching: false };
+        currentStartPage += pagesCount;
+        return chunkObj;
+      });
+
+      totalPagesCount = currentStartPage - 1;
+      setTotalPages(totalPagesCount);
+      
+      // Heavy network fetch occurs here while ticker smoothly climbs up to 60%
+      await fetchAndLoadChunk(documentChunks[0]);
+    }
+
+    // --- NETWORK COMPLETE: STOP TICKER & BOOST PROGRESS ---
+    clearInterval(progressInterval);
+    updateProgress(85, "Generating pages...");
+    
+    const firstPage = await documentChunks[0].docInstance.getPage(1);
+    const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
+    const containerWidth = Math.min(viewerContainer.clientWidth || window.innerWidth, window.innerWidth);
+    baseFitScale = containerWidth / unscaledViewport.width;
+    firstPage.cleanup();
+
+    // FULLY DONE: 100%
+    updateProgress(100, "Done!");
+
+    // Wait exactly 400 milliseconds so you can visually see it hit 100% before it vanishes
+    await new Promise(resolve => setTimeout(resolve, 400));
+
+    // --- SHARED UI INITIALIZATION ---
+    viewerContainer.innerHTML = ''; // Clear loader
+    
+    const pagesList = document.createElement('div');
+    pagesList.id = 'pdf-pages-list';
+    pagesList.style.width = '100%';
+    viewerContainer.appendChild(pagesList);
+
+    const loadMoreContainer = document.createElement('div');
+    loadMoreContainer.id = 'load-more-container';
+    viewerContainer.appendChild(loadMoreContainer);
+
+    await loadNextBatch(); 
+    setupPageObserver();
+    setupTouchPinchZoom();
+    initToolbarToggle(); // (This contains the click-to-hide fix we did earlier!)
+
+    if (isChunkedDriveFormat) preloadRemainingChunks();
+
+  } catch (err) {
+    clearInterval(progressInterval); // Clean up timer on error
+    console.error('PDF Init Error:', err);
+    viewerContainer.innerHTML = `<p style="color:red; text-align:center; margin-top: 20px;">Failed to load document: ${err.message}</p>`;
+  }
+};
 
 
 // Background worker to silently load the rest of the file
@@ -475,7 +509,7 @@ function setupPageObserver() {
 
           // --- 5-PAGE INFINITE SCROLL TRIGGER ---
           // Automatically trigger loading the next batch when reader reaches within 5 pages of the end
-          if (!isLoadingBatch && currentlyLoadedPage < totalPagesCount && (currentlyLoadedPage - pageNum <= 8)) {
+          if (!isLoadingBatch && currentlyLoadedPage < totalPagesCount && (currentlyLoadedPage - pageNum <= 20)) {
             await loadNextBatch();
             setupPageObserver();
           }
@@ -770,40 +804,38 @@ function setupPageObserver() {
     }, 100);
   }
 
-  /* ==========================================
-     FLOATING TOOLBAR AUTO-HIDE
-     ========================================== */
-  function resetToolbarTimeout() {
-    if (!floatingToolbar) return;
+ /* ==========================================
+   FLOATING TOOLBAR CONTROLS (CLICK ONLY)
+   ========================================== */
 
-    floatingToolbar.classList.remove('hidden');
-    if (toolbarTimer) clearTimeout(toolbarTimer);
+// We empty this out so the toolbar no longer auto-hides after 3 seconds!
+function resetToolbarTimeout() {
+  // Purposely left blank to kill the auto-hide timer bug
+}
 
-    if (!isPenActive) {
-      toolbarTimer = setTimeout(() => {
-        floatingToolbar.classList.add('hidden');
-      }, 3000);
-    }
-  }
+// Replaces initToolbarAutoHide
+function initToolbarToggle() {
+  const viewerContainer = document.getElementById('viewer-container');
+  const floatingToolbar = document.getElementById('floating-toolbar');
+  
+  if (!viewerContainer || !floatingToolbar) return;
 
-  function initToolbarAutoHide() {
-    const readerSection = document.getElementById('reader-section');
-    if (!readerSection) return;
+  // Listen for clicks on the entire viewer container
+  viewerContainer.addEventListener('click', (e) => {
+    
+    // 1. If drawing pen is ON, do not hide the toolbar
+    if (typeof isPenActive !== 'undefined' && isPenActive) return;
 
-    readerSection.addEventListener('click', (e) => {
-      if (isPenActive) return;
-      if (floatingToolbar && floatingToolbar.contains(e.target)) return;
+    // 2. If the user clicked directly ON the toolbar or its buttons, do not hide it
+    if (floatingToolbar.contains(e.target)) return;
 
-      if (floatingToolbar.classList.contains('hidden')) {
-        resetToolbarTimeout();
-      } else {
-        floatingToolbar.classList.add('hidden');
-        if (toolbarTimer) clearTimeout(toolbarTimer);
-      }
-    });
+    // 3. Otherwise, they clicked a blank spot on the PDF -> Toggle!
+    floatingToolbar.classList.toggle('hidden');
+  });
+}
+ 
 
-    resetToolbarTimeout();
-  }
+ 
 
   function showError(msg) {
     const viewerContainer = document.getElementById('viewer-container');

@@ -8,6 +8,3 @@ const GOOGLE_APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyKPdyAI
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const STORAGE_BUCKET = 'course-notes';
-
-// Used by the viewer to read PDF chunks straight from Google Drive (fast route)
-const GOOGLE_DRIVE_API_KEY = 'AIzaSyCAWOQeAueaXJSnEhGeKGdPjj14oYgW9AE';

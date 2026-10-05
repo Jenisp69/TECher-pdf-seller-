@@ -258,29 +258,53 @@ window.initReader = async function (sessionData) {
   }
 
   // Network fetcher that resolves a chunk ID via the Apps Script Proxy
+  // Becomes true if Google rejects the key (403/400), so we stop wasting time on the fast route
+  let directDriveFailed = false;
+
   async function fetchAndLoadChunk(chunk) {
     if (chunk.docInstance || chunk.isFetching) return;
     chunk.isFetching = true;
 
     try {
-      const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${chunk.fileId}`;
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error('Proxy connection failed.');
-      
-      const resJson = await response.json();
-      if (resJson.status !== 'success') throw new Error('Proxy file fetch failed.');
+      let bytes = null;
 
-      const binaryStr = window.atob(resJson.base64Data);
-      const len = binaryStr.length;
-      const bytes = new Uint8Array(len);
-      for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+      // FAST ROUTE: read the file straight from Google Drive (no Apps Script, no base64)
+      if (!directDriveFailed && typeof GOOGLE_DRIVE_API_KEY !== 'undefined' && GOOGLE_DRIVE_API_KEY) {
+        try {
+          const directUrl = `https://www.googleapis.com/drive/v3/files/${chunk.fileId}?alt=media&key=${GOOGLE_DRIVE_API_KEY}`;
+          const directRes = await fetch(directUrl);
+          if (!directRes.ok) {
+            if (directRes.status === 403 || directRes.status === 400) directDriveFailed = true;
+            throw new Error('Direct Drive status ' + directRes.status);
+          }
+          bytes = new Uint8Array(await directRes.arrayBuffer());
+        } catch (directErr) {
+          console.warn('Direct Drive load failed, using backup route:', directErr);
+          bytes = null;
+        }
+      }
+
+      // BACKUP ROUTE: the old Apps Script proxy (used only if the fast route fails)
+      if (!bytes) {
+        const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${chunk.fileId}`;
+        const response = await fetch(proxyUrl);
+        if (!response.ok) throw new Error('Proxy connection failed.');
+
+        const resJson = await response.json();
+        if (resJson.status !== 'success') throw new Error('Proxy file fetch failed.');
+
+        const binaryStr = window.atob(resJson.base64Data);
+        const len = binaryStr.length;
+        bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+      }
 
       const loadingTask = pdfjsLib.getDocument({
         data: bytes.buffer,
         cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
         cMapPacked: true,
       });
-      
+
       chunk.docInstance = await loadingTask.promise;
     } catch (err) {
       console.warn(`Failed to preload chunk covering pages ${chunk.startPage}-${chunk.endPage}:`, err);

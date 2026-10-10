@@ -23,13 +23,10 @@ function getGoogleDriveId(urlOrId) {
 
   // --- Hardware Capability Detection ---
   const isLowEndMobile = (navigator.hardwareConcurrency || 4) <= 4 || window.innerWidth <= 768;
-  const BATCH_SIZE = isLowEndMobile ? 3 : 10;
 
   // --- Core State Management ---
   let currentPdfDoc = null;
   let totalPagesCount = 0;
-  let currentlyLoadedPage = 0;
-  let isLoadingBatch = false;
   let documentChunks = []; 
 
   // --- Layout & View Settings ---
@@ -37,6 +34,16 @@ function getGoogleDriveId(urlOrId) {
   let zoomMultiplier = 1.0;
   let isPenActive = false;
   let activeSubjectId = 'default_subject';
+  let activeStudentId = 'guest';
+
+  // --- Page slots (one empty box per page, drawn only when near the screen) ---
+  let pageWrappers = [];
+  let pageHeightRatio = 1.414;      // page height / page width, measured from page 1
+  let layoutWidth = 0;              // page width in pixels at 100% zoom
+  const visiblePages = new Set();   // pages currently near the screen
+  let scrollListenerAttached = false;
+  let scrollTicking = false;
+  let toolbarToggleBound = false;
 
   // --- Gestures & UI Timers ---
   let initialZoomMultiplier = 1.0;
@@ -53,8 +60,49 @@ function getGoogleDriveId(urlOrId) {
   /* ==========================================
      STROKE STORAGE HELPERS
      ========================================== */
+  // Everything a student draws or writes is saved per student, per book, on this device
+  function storageScope() {
+    return `${activeStudentId}_${activeSubjectId}`;
+  }
+
   function getStrokeStorageKey(pageNum) {
-    return `strokes_${activeSubjectId}_p${pageNum}`;
+    return `strokes_${storageScope()}_p${pageNum}`;
+  }
+
+  function getNoteStorageKey(pageNum) {
+    return `note_${storageScope()}_p${pageNum}`;
+  }
+
+  function getNotePrefix() {
+    return `note_${storageScope()}_p`;
+  }
+
+  // Older versions saved pen strokes and notes without the student's id, so every student
+  // on the same device shared them. Move them once to the student who opens the book now.
+  function migrateLegacyStorage() {
+    try {
+      const kinds = [
+        { kind: 'strokes', prefix: `strokes_${activeSubjectId}_p` },
+        { kind: 'note', prefix: `note_${activeSubjectId}_p` }
+      ];
+      const moves = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        for (const k of kinds) {
+          if (key.startsWith(k.prefix)) {
+            moves.push([key, `${k.kind}_${storageScope()}_p${key.slice(k.prefix.length)}`]);
+          }
+        }
+      }
+      moves.forEach(([oldKey, newKey]) => {
+        const value = localStorage.getItem(oldKey);
+        if (value !== null && localStorage.getItem(newKey) === null) localStorage.setItem(newKey, value);
+        localStorage.removeItem(oldKey);
+      });
+    } catch (e) {
+      // storage problems must never stop the book from opening
+    }
   }
 
   function getSavedStrokes(pageNum) {
@@ -107,11 +155,22 @@ window.initReader = async function (sessionData) {
   const viewerContainer = document.getElementById('viewer-container');
   if (!viewerContainer || !sessionData || !sessionData.pdfPath) return;
 
-  currentlyLoadedPage = 0;
-  isLoadingBatch = false;
   zoomMultiplier = 1.0;
   activeSubjectId = sessionData.subjectName || 'course_doc';
+  activeStudentId = sessionData.studentId || 'guest';
+  migrateLegacyStorage();
+  pageWrappers = [];
+  visiblePages.clear();
+  const searchBox = document.getElementById('note-search-input');
+  if (searchBox) searchBox.value = '';
+  document.getElementById('note-search-results')?.classList.add('hidden');
   documentChunks = [];
+  stopReaderLoading();      // stop anything left over from a previous book
+  readerStopped = false;
+  readerSession++;
+  activeFetches = 0;
+  preloadEnabled = false;
+  currentReadPage = 1;
 
   // === COOL MINECRAFT LOADER HTML ===
   const loaderHTML = `
@@ -196,7 +255,7 @@ window.initReader = async function (sessionData) {
       documentChunks = chunksData.map(chunkStr => {
         const [id, pagesStr] = chunkStr.split(':');
         const pagesCount = parseInt(pagesStr, 10);
-        const chunkObj = { fileId: id, startPage: currentStartPage, endPage: currentStartPage + pagesCount - 1, pageCount: pagesCount, docInstance: null, isFetching: false };
+        const chunkObj = { fileId: id, startPage: currentStartPage, endPage: currentStartPage + pagesCount - 1, pageCount: pagesCount, docInstance: null, isFetching: false, session: readerSession };
         currentStartPage += pagesCount;
         return chunkObj;
       });
@@ -216,6 +275,8 @@ window.initReader = async function (sessionData) {
     const unscaledViewport = firstPage.getViewport({ scale: 1.0 });
     const containerWidth = Math.min(viewerContainer.clientWidth || window.innerWidth, window.innerWidth);
     baseFitScale = containerWidth / unscaledViewport.width;
+    layoutWidth = containerWidth;
+    pageHeightRatio = unscaledViewport.height / unscaledViewport.width;
     firstPage.cleanup();
 
     // FULLY DONE: 100%
@@ -232,15 +293,14 @@ window.initReader = async function (sessionData) {
     pagesList.style.width = '100%';
     viewerContainer.appendChild(pagesList);
 
-    const loadMoreContainer = document.createElement('div');
-    loadMoreContainer.id = 'load-more-container';
-    viewerContainer.appendChild(loadMoreContainer);
-
-    await loadNextBatch(); 
+    // One empty, correctly sized slot per page, so scrolling and "jump to page" work instantly
+    buildPagePlaceholders(pagesList);
     setupPageObserver();
-    initToolbarToggle(); // (This contains the click-to-hide fix we did earlier!)
+    initToolbarToggle();
+    startScrollTracking();
 
-    if (isChunkedDriveFormat) preloadRemainingChunks();
+    preloadEnabled = true;
+    updateCurrentPage();   // page 1: starts loading the pieces ahead
 
   } catch (err) {
     clearInterval(progressInterval); // Clean up timer on error
@@ -250,44 +310,207 @@ window.initReader = async function (sessionData) {
 };
 
 
-// Background worker to silently load the rest of the file
-  async function preloadRemainingChunks() {
-    for (let i = 1; i < documentChunks.length; i++) {
-      await fetchAndLoadChunk(documentChunks[i]);
+/* ==========================================
+     SMART LOADING
+     - keeps a moving window of pages loaded ahead of the reader
+     - downloads a few pieces at the same time
+     - saves pieces on the device so reopening a book is instant
+     - stops everything when the student leaves the book
+     ========================================== */
+  const PRELOAD_AHEAD_PAGES = 50;    // keep this many pages ahead of the reader loaded
+  const PRELOAD_BEHIND_PAGES = 10;   // also keep a few pages behind the reader ready
+  const KEEP_BEHIND_PAGES = 40;      // free memory for pieces further behind than this
+  const KEEP_AHEAD_PAGES = 120;      // ...or further ahead than this
+  const MAX_PARALLEL_FETCHES = 3;    // pieces downloaded at the same time
+  const CACHE_ENABLED = true;        // set to false to switch the saved copies off
+  const CACHE_DB_NAME = 'thinkahead_chunk_cache';
+  const CACHE_MAX_BYTES = 300 * 1024 * 1024;
+
+  let currentReadPage = 1;
+  let activeFetches = 0;
+  let preloadEnabled = false;
+  let readerStopped = false;
+  let readerSession = 0;
+  const activeControllers = new Set();
+
+  // If the fast route fails, skip it for 60 seconds, then try it again
+  let directRetryAt = 0;
+
+  /* ---- Saved copies on the student's device (IndexedDB) ---- */
+  let cacheDbPromise = null;
+
+  function openCacheDb() {
+    if (!CACHE_ENABLED || typeof indexedDB === 'undefined') return Promise.resolve(null);
+    if (!cacheDbPromise) {
+      cacheDbPromise = new Promise((resolve) => {
+        try {
+          const req = indexedDB.open(CACHE_DB_NAME, 1);
+          req.onupgradeneeded = () => {
+            const db = req.result;
+            db.createObjectStore('chunks');                    // key = file id, value = the PDF piece
+            db.createObjectStore('meta', { keyPath: 'id' });   // {id, size, lastUsed}
+          };
+          req.onsuccess = () => resolve(req.result);
+          req.onerror = () => resolve(null);
+          req.onblocked = () => resolve(null);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }
+    return cacheDbPromise;
+  }
+
+  function idbRequest(req) {
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function cacheGet(fileId) {
+    try {
+      const db = await openCacheDb();
+      if (!db) return null;
+      const data = await idbRequest(db.transaction('chunks').objectStore('chunks').get(fileId));
+      if (!data) return null;
+      db.transaction('meta', 'readwrite').objectStore('meta')
+        .put({ id: fileId, size: data.byteLength, lastUsed: Date.now() });
+      return data;
+    } catch (e) {
+      return null;
     }
   }
 
-  // Network fetcher that resolves a chunk ID via the Apps Script Proxy
-  // Becomes true if Google rejects the key (403/400), so we stop wasting time on the fast route
-  let directDriveFailed = false;
+  async function cachePrune(db) {
+    const all = await idbRequest(db.transaction('meta').objectStore('meta').getAll());
+    let total = all.reduce((sum, m) => sum + (m.size || 0), 0);
+    if (total <= CACHE_MAX_BYTES) return;
+    all.sort((a, b) => a.lastUsed - b.lastUsed); // oldest first
+    const tx = db.transaction(['chunks', 'meta'], 'readwrite');
+    for (const m of all) {
+      if (total <= CACHE_MAX_BYTES * 0.85) break;
+      tx.objectStore('chunks').delete(m.id);
+      tx.objectStore('meta').delete(m.id);
+      total -= (m.size || 0);
+    }
+  }
 
+  async function cachePut(fileId, buffer) {
+    try {
+      const db = await openCacheDb();
+      if (!db) return;
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(['chunks', 'meta'], 'readwrite');
+        tx.objectStore('chunks').put(buffer, fileId);
+        tx.objectStore('meta').put({ id: fileId, size: buffer.byteLength, lastUsed: Date.now() });
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error);
+        tx.onabort = () => reject(tx.error);
+      });
+      await cachePrune(db);
+    } catch (e) {
+      // the saved copy is a bonus, so any problem here is ignored
+    }
+  }
+
+  /* ---- Stop everything when the student leaves the book ---- */
+  function stopReaderLoading() {
+    readerStopped = true;
+    activeControllers.forEach((c) => { try { c.abort(); } catch (e) {} });
+    activeControllers.clear();
+  }
+
+  /* ---- Free memory for pieces far away from the reader ---- */
+  function releaseFarAway() {
+    for (const chunk of documentChunks) {
+      const farBehind = chunk.endPage < currentReadPage - KEEP_BEHIND_PAGES;
+      const farAhead = chunk.startPage > currentReadPage + KEEP_AHEAD_PAGES;
+      if ((farBehind || farAhead) && chunk.docInstance && !chunk.isFetching) {
+        const doc = chunk.docInstance;
+        chunk.docInstance = null;
+        try { Promise.resolve(doc.destroy()).catch(() => {}); } catch (e) {}
+      }
+    }
+  }
+
+  /* ---- Keep the pages around the reader loaded: current piece first, then ahead, then just behind ---- */
+  function preloadAhead(pageNum) {
+    if (!preloadEnabled || readerStopped) return;
+    if (!documentChunks.length || documentChunks[0].fileId === 'legacy_supabase') return;
+
+    currentReadPage = pageNum;
+    const firstWanted = pageNum - PRELOAD_BEHIND_PAGES;
+    const lastWanted = pageNum + PRELOAD_AHEAD_PAGES;
+
+    const idx = documentChunks.findIndex(c => pageNum >= c.startPage && pageNum <= c.endPage);
+    if (idx === -1) return;
+
+    const order = [idx];
+    for (let i = idx + 1; i < documentChunks.length && documentChunks[i].startPage <= lastWanted; i++) order.push(i);
+    for (let i = idx - 1; i >= 0 && documentChunks[i].endPage >= firstWanted; i--) order.push(i);
+
+    // After a jump, stop downloads that are no longer near the reader
+    const wanted = new Set(order);
+    documentChunks.forEach((c, i) => {
+      if (c.isFetching && !wanted.has(i) && c.controller) {
+        try { c.controller.abort(); } catch (e) {}
+      }
+    });
+
+    for (const i of order) {
+      if (activeFetches >= MAX_PARALLEL_FETCHES) break;
+      const chunk = documentChunks[i];
+      if (chunk.docInstance || chunk.isFetching) continue;
+      if ((chunk.failCount || 0) >= 2) continue; // stop retrying a piece that keeps failing
+      fetchAndLoadChunk(chunk); // not awaited, pieces load side by side
+    }
+    releaseFarAway();
+  }
+
+  /* ---- Get one piece: saved copy first, then fast route, then the old script route ---- */
   async function fetchAndLoadChunk(chunk) {
     if (chunk.docInstance || chunk.isFetching) return;
+    if (readerStopped || chunk.session !== readerSession) return;
+
+    const mySession = readerSession;
     chunk.isFetching = true;
+    activeFetches++;
+    const controller = new AbortController();
+    activeControllers.add(controller);
+    chunk.controller = controller;
 
     try {
       let bytes = null;
+      let fromCache = false;
 
-      // FAST ROUTE: read the file straight from Google Drive (no Apps Script, no base64)
-      if (!directDriveFailed && typeof GOOGLE_DRIVE_API_KEY !== 'undefined' && GOOGLE_DRIVE_API_KEY) {
+      // 1. SAVED COPY on this device (instant)
+      const cached = await cacheGet(chunk.fileId);
+      if (controller.signal.aborted) return; // the student already left the book
+      if (cached) {
+        bytes = new Uint8Array(cached);
+        fromCache = true;
+      }
+
+      // 2. FAST ROUTE: straight from Google Drive (no Apps Script, no base64)
+      if (!bytes && Date.now() >= directRetryAt && typeof GOOGLE_DRIVE_API_KEY !== 'undefined' && GOOGLE_DRIVE_API_KEY) {
         try {
           const directUrl = `https://www.googleapis.com/drive/v3/files/${chunk.fileId}?alt=media&key=${GOOGLE_DRIVE_API_KEY}`;
-          const directRes = await fetch(directUrl);
-          if (!directRes.ok) {
-            if (directRes.status === 403 || directRes.status === 400) directDriveFailed = true;
-            throw new Error('Direct Drive status ' + directRes.status);
-          }
+          const directRes = await fetch(directUrl, { signal: controller.signal });
+          if (!directRes.ok) throw new Error('Direct Drive status ' + directRes.status);
           bytes = new Uint8Array(await directRes.arrayBuffer());
         } catch (directErr) {
+          if (directErr && directErr.name === 'AbortError') throw directErr;
           console.warn('Direct Drive load failed, using backup route:', directErr);
+          directRetryAt = Date.now() + 60000;
           bytes = null;
         }
       }
 
-      // BACKUP ROUTE: the old Apps Script proxy (used only if the fast route fails)
+      // 3. BACKUP ROUTE: the old Apps Script proxy
       if (!bytes) {
         const proxyUrl = `${GOOGLE_APPS_SCRIPT_URL}?fileId=${chunk.fileId}`;
-        const response = await fetch(proxyUrl);
+        const response = await fetch(proxyUrl, { signal: controller.signal });
         if (!response.ok) throw new Error('Proxy connection failed.');
 
         const resJson = await response.json();
@@ -299,6 +522,9 @@ window.initReader = async function (sessionData) {
         for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
       }
 
+      // Keep a copy on this device for next time (before pdf.js takes over the bytes)
+      if (!fromCache) cachePut(chunk.fileId, bytes.slice().buffer);
+
       const loadingTask = pdfjsLib.getDocument({
         data: bytes.buffer,
         cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
@@ -306,74 +532,49 @@ window.initReader = async function (sessionData) {
       });
 
       chunk.docInstance = await loadingTask.promise;
+      chunk.failCount = 0;
     } catch (err) {
-      console.warn(`Failed to preload chunk covering pages ${chunk.startPage}-${chunk.endPage}:`, err);
+      if (err && err.name === 'AbortError') return; // the student left the book, not a failure
+      chunk.failCount = (chunk.failCount || 0) + 1;
+      console.warn(`Failed to load chunk covering pages ${chunk.startPage}-${chunk.endPage}:`, err);
     } finally {
+      activeControllers.delete(controller);
       chunk.isFetching = false;
+      if (mySession === readerSession) {
+        activeFetches = Math.max(0, activeFetches - 1);
+        if (!readerStopped) preloadAhead(currentReadPage);
+      }
     }
   }
 
 
 
   /* ==========================================
-     BATCH PAGE LOADER
+     PAGE SLOTS
+     One empty box per page. A page is drawn only while it is near the screen.
      ========================================== */
-  async function loadNextBatch() {
-    if (isLoadingBatch || currentlyLoadedPage >= totalPagesCount) return;
+  function estimatedPageHeight() {
+    return Math.round(layoutWidth * zoomMultiplier * pageHeightRatio);
+  }
 
-    isLoadingBatch = true;
-    const pagesList = document.getElementById('pdf-pages-list');
-    const loadMoreContainer = document.getElementById('load-more-container');
-
-    if (loadMoreContainer) {
-      loadMoreContainer.innerHTML =
-        '<p style="color:var(--text-muted); font-size:0.9rem;">⏳ Loading next batch of pages...</p>';
-    }
-
-    const startPage = currentlyLoadedPage + 1;
-    const endPage = Math.min(currentlyLoadedPage + BATCH_SIZE, totalPagesCount);
-
-    const renderTasks = [];
+  function buildPagePlaceholders(pagesList) {
+    pageWrappers = [];
     const fragment = document.createDocumentFragment();
+    const height = estimatedPageHeight();
 
-    for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+    for (let pageNum = 1; pageNum <= totalPagesCount; pageNum++) {
       const wrapper = document.createElement('div');
       wrapper.className = 'page-wrapper';
       wrapper.id = `page-${pageNum}`;
       wrapper.dataset.pageNum = pageNum;
       wrapper.dataset.rendered = 'false';
       wrapper.style.position = 'relative';
-      wrapper.style.minHeight = '400px';
-
+      wrapper.style.minHeight = `${height}px`;
+      wrapper.innerHTML = `<p class="page-placeholder">Page ${pageNum}</p>`;
+      pageWrappers.push(wrapper);
       fragment.appendChild(wrapper);
-      renderTasks.push({ pageNum, wrapper });
     }
-
-    pagesList?.appendChild(fragment);
-
-    if (isLowEndMobile) {
-      for (const task of renderTasks) {
-        await renderSinglePage(task.pageNum, task.wrapper);
-      }
-    } else {
-      await Promise.all(renderTasks.map((task) => renderSinglePage(task.pageNum, task.wrapper)));
-    }
-
-    currentlyLoadedPage = endPage;
-    isLoadingBatch = false;
-
-    if (loadMoreContainer) {
-      if (currentlyLoadedPage < totalPagesCount) {
-        loadMoreContainer.innerHTML = `
-          <button id="btn-load-more-pages" style="padding: 10px 20px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold;">
-            Load More Pages (${currentlyLoadedPage} / ${totalPagesCount})
-          </button>
-        `;
-        document.getElementById('btn-load-more-pages')?.addEventListener('click', loadNextBatch, { once: true });
-      } else {
-        loadMoreContainer.innerHTML = '<p style="color:var(--text-muted); font-size:0.85rem;">✅ End of Document</p>';
-      }
-    }
+    pagesList.appendChild(fragment);
   }
 
   /* ==========================================
@@ -461,12 +662,19 @@ window.initReader = async function (sessionData) {
       const noteBox = document.createElement('textarea');
       noteBox.placeholder = `📝 Page ${globalPageNum} note...`;
 
-      const noteKey = `note_${activeSubjectId}_p${globalPageNum}`;
+      const noteKey = getNoteStorageKey(globalPageNum);
       noteBox.value = localStorage.getItem(noteKey) || '';
+      noteTrigger.classList.toggle('has-note', noteBox.value.trim().length > 0);
 
       noteBox.addEventListener('input', (e) => {
-        localStorage.setItem(noteKey, e.target.value);
+        const text = e.target.value;
+        if (text.trim()) localStorage.setItem(noteKey, text);
+        else localStorage.removeItem(noteKey);
+        noteTrigger.classList.toggle('has-note', text.trim().length > 0);
       });
+
+      // Clicking inside the note must not hide the toolbar
+      notePanel.addEventListener('click', (e) => e.stopPropagation());
 
       notePanel.appendChild(noteBox);
 
@@ -482,10 +690,26 @@ window.initReader = async function (sessionData) {
       page.cleanup();
       
       wrapper.dataset.rendered = 'true';
+      if (!visiblePages.has(globalPageNum)) unloadOffscreenCanvas(wrapper); // scrolled away while drawing
 
     } catch (err) {
       console.error(`Error rendering global page ${globalPageNum}:`, err);
-      wrapper.innerHTML = `<p style="color:red; text-align:center;">Failed to render page ${globalPageNum}</p>`;
+      wrapper.innerHTML = '';
+      const failMsg = document.createElement('p');
+      failMsg.className = 'page-placeholder';
+      failMsg.textContent = `Couldn't load page ${globalPageNum}. `;
+      const retryBtn = document.createElement('button');
+      retryBtn.type = 'button';
+      retryBtn.className = 'btn-sm';
+      retryBtn.textContent = 'Tap to retry';
+      retryBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const failedChunk = documentChunks.find(c => globalPageNum >= c.startPage && globalPageNum <= c.endPage);
+        if (failedChunk) failedChunk.failCount = 0;
+        renderSinglePage(globalPageNum, wrapper);
+      });
+      failMsg.appendChild(retryBtn);
+      wrapper.appendChild(failMsg);
     } finally {
       // 9. Always unlock the element, even if rendering fails!
       wrapper.dataset.isRendering = 'false';
@@ -496,65 +720,94 @@ window.initReader = async function (sessionData) {
      VRAM CLEANUP & RE-RENDER OBSERVER
      ========================================== */
   function unloadOffscreenCanvas(wrapper) {
-    const canvases = wrapper.querySelectorAll('canvas');
-    if (canvases.length > 0) {
-      canvases.forEach((canvas) => {
-        canvas.width = 0;
-        canvas.height = 0;
-        canvas.remove();
-      });
-      wrapper.dataset.rendered = 'false';
-    }
+    if (wrapper.dataset.rendered !== 'true') return;
+    wrapper.querySelectorAll('canvas').forEach((canvas) => {
+      canvas.width = 0;
+      canvas.height = 0;
+    });
+    wrapper.innerHTML = `<p class="page-placeholder">Page ${wrapper.dataset.pageNum}</p>`;
+    wrapper.dataset.rendered = 'false';
   }
 
 /* ==========================================
-   INFINITE SCROLL & PAGE OBSERVER
+   PAGE OBSERVER: draws pages near the screen, frees pages far from it
    ========================================== */
 function setupPageObserver() {
   if (pageObserver) pageObserver.disconnect();
+  visiblePages.clear();
+
+  const margin = isLowEndMobile ? 1000 : 1500;
 
   pageObserver = new IntersectionObserver(
     (entries) => {
-      entries.forEach(async (entry) => {
+      entries.forEach((entry) => {
         const wrapper = entry.target;
         const pageNum = parseInt(wrapper.dataset.pageNum, 10);
 
         if (entry.isIntersecting) {
-          if (wrapper.dataset.rendered === 'false') {
-            await renderSinglePage(pageNum, wrapper);
-          }
-
-          const pageInput = document.getElementById('page-jump-input');
-          if (pageInput && document.activeElement !== pageInput) {
-            pageInput.value = pageNum;
-          }
-
-          // --- 5-PAGE INFINITE SCROLL TRIGGER ---
-          // Automatically trigger loading the next batch when reader reaches within 5 pages of the end
-          if (!isLoadingBatch && currentlyLoadedPage < totalPagesCount && (currentlyLoadedPage - pageNum <= 20)) {
-            await loadNextBatch();
-            setupPageObserver();
-          }
+          visiblePages.add(pageNum);
+          if (wrapper.dataset.rendered === 'false') renderSinglePage(pageNum, wrapper);
         } else {
-          if (isLowEndMobile && wrapper.dataset.rendered === 'true') {
-            unloadOffscreenCanvas(wrapper);
-          }
+          visiblePages.delete(pageNum);
+          unloadOffscreenCanvas(wrapper);
         }
       });
     },
     {
       root: null,
-      rootMargin: '300px 0px 300px 0px',
+      rootMargin: `${margin}px 0px ${margin}px 0px`,
       threshold: 0,
     }
   );
 
-  document.querySelectorAll('.page-wrapper').forEach((p) => pageObserver.observe(p));
+  pageWrappers.forEach((wrapper) => pageObserver.observe(wrapper));
 }
 
+/* ==========================================
+   WHICH PAGE IS THE STUDENT ON? (drives the loading window)
+   ========================================== */
+function startScrollTracking() {
+  if (scrollListenerAttached) return;
+  scrollListenerAttached = true;
+  window.addEventListener('scroll', () => {
+    if (scrollTicking) return;
+    scrollTicking = true;
+    setTimeout(() => {
+      scrollTicking = false;
+      updateCurrentPage();
+    }, 150);
+  }, { passive: true });
+}
 
+function updateCurrentPage() {
+  if (!pageWrappers.length || readerStopped) return;
 
+  // Binary search for the first page whose bottom edge is below the middle of the screen
+  const center = window.innerHeight / 2;
+  let lo = 0;
+  let hi = pageWrappers.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (pageWrappers[mid].getBoundingClientRect().bottom < center) lo = mid + 1;
+    else hi = mid;
+  }
 
+  const pageNum = lo + 1;
+  currentReadPage = pageNum;
+
+  const pageInput = document.getElementById('page-jump-input');
+  if (pageInput && document.activeElement !== pageInput) pageInput.value = pageNum;
+
+  preloadAhead(pageNum);
+}
+
+function jumpToPage(target) {
+  const pageNum = Math.min(Math.max(parseInt(target, 10) || 1, 1), totalPagesCount || 1);
+  const wrapper = document.getElementById(`page-${pageNum}`);
+  if (!wrapper) return;
+  wrapper.scrollIntoView({ behavior: 'auto', block: 'start' }); // instant, no scrolling past hundreds of pages
+  updateCurrentPage();
+}
 
   function updateZoomLabel() {
     const zoomLabel = document.getElementById('zoom-label');
@@ -715,19 +968,9 @@ function setupPageObserver() {
     resetToolbarTimeout();
   });
 
-  jumpInput?.addEventListener('change', async (e) => {
+  jumpInput?.addEventListener('change', (e) => {
     e.stopPropagation();
-    const targetPage = parseInt(jumpInput.value, 10);
-
-    if (targetPage >= 1 && targetPage <= totalPagesCount) {
-      while (currentlyLoadedPage < targetPage) {
-        await loadNextBatch();
-      }
-      setupPageObserver();
-
-      const targetElem = document.getElementById(`page-${targetPage}`);
-      targetElem?.scrollIntoView({ behavior: 'smooth' });
-    }
+    jumpToPage(jumpInput.value);
     resetToolbarTimeout();
   });
 
@@ -745,32 +988,90 @@ function setupPageObserver() {
   });
 
   async function reRenderLoadedPages() {
-    const loadedPagesCount = currentlyLoadedPage;
-    for (let pageNum = 1; pageNum <= loadedPagesCount; pageNum++) {
-      const wrapper = document.getElementById(`page-${pageNum}`);
-      if (wrapper) {
-        wrapper.dataset.rendered = 'false';
-        await renderSinglePage(pageNum, wrapper);
-      }
-    }
+    // New zoom: resize every slot, drop the old drawings, and let the observer redraw the pages near the screen
+    const height = estimatedPageHeight();
+    pageWrappers.forEach((wrapper) => {
+      wrapper.style.minHeight = `${height}px`;
+      wrapper.style.width = '';
+      unloadOffscreenCanvas(wrapper);
+    });
     setupPageObserver();
   }
 
-  function handleScrollBatchLoad() {
-    if (currentlyLoadedPage >= totalPagesCount || isLoadingBatch) return;
+  /* ==========================================
+     NOTE SEARCH (searches this student's notes in the open book)
+     ========================================== */
+  function searchMyNotes(query) {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const prefix = getNotePrefix();
+    const results = [];
 
-    if (scrollDebounceTimeout) clearTimeout(scrollDebounceTimeout);
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith(prefix)) continue;
+      const pageNum = parseInt(key.slice(prefix.length), 10);
+      const text = localStorage.getItem(key) || '';
+      const at = text.toLowerCase().indexOf(q);
+      if (isNaN(pageNum) || at === -1) continue;
 
-    scrollDebounceTimeout = setTimeout(() => {
-      const scrollPosition = window.innerHeight + window.scrollY;
-      const threshold = document.body.offsetHeight - 900;
-
-      if (scrollPosition >= threshold) {
-        loadNextBatch();
-        setupPageObserver();
-      }
-    }, 100);
+      const from = Math.max(0, at - 25);
+      const snippet = (from > 0 ? '…' : '') + text.slice(from, at + q.length + 45).replace(/\s+/g, ' ');
+      results.push({ pageNum, snippet });
+    }
+    return results.sort((a, b) => a.pageNum - b.pageNum).slice(0, 30);
   }
+
+  function renderNoteSearchResults(query) {
+    const box = document.getElementById('note-search-results');
+    if (!box) return;
+    box.innerHTML = '';
+
+    if (!query.trim()) {
+      box.classList.add('hidden');
+      return;
+    }
+    box.classList.remove('hidden');
+
+    const results = searchMyNotes(query);
+    if (!results.length) {
+      const empty = document.createElement('div');
+      empty.className = 'note-result-empty';
+      empty.textContent = 'No notes found in this book.';
+      box.appendChild(empty);
+      return;
+    }
+
+    results.forEach((r) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'note-result-item';
+      const label = document.createElement('b');
+      label.textContent = `Page ${r.pageNum}`;
+      const snippet = document.createElement('span');
+      snippet.textContent = r.snippet;
+      item.appendChild(label);
+      item.appendChild(snippet);
+      item.addEventListener('click', () => {
+        box.classList.add('hidden');
+        jumpToPage(r.pageNum);
+      });
+      box.appendChild(item);
+    });
+  }
+
+  const noteSearchInput = document.getElementById('note-search-input');
+  noteSearchInput?.addEventListener('input', () => renderNoteSearchResults(noteSearchInput.value));
+  noteSearchInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      noteSearchInput.value = '';
+      renderNoteSearchResults('');
+    }
+  });
+  document.addEventListener('click', (e) => {
+    const inside = e.target && e.target.closest && e.target.closest('.note-search-wrapper');
+    if (!inside) document.getElementById('note-search-results')?.classList.add('hidden');
+  });
 
  /* ==========================================
    FLOATING TOOLBAR CONTROLS (CLICK ONLY)
@@ -787,6 +1088,8 @@ function initToolbarToggle() {
   const floatingToolbar = document.getElementById('floating-toolbar');
   
   if (!viewerContainer || !floatingToolbar) return;
+  if (toolbarToggleBound) return;   // otherwise every book opened adds one more listener
+  toolbarToggleBound = true;
 
   // Listen for clicks on the entire viewer container
   viewerContainer.addEventListener('click', (e) => {
@@ -804,6 +1107,8 @@ function initToolbarToggle() {
  
 
  
+
+  document.getElementById('back-to-dash-btn')?.addEventListener('click', stopReaderLoading);
 
   function showError(msg) {
     const viewerContainer = document.getElementById('viewer-container');

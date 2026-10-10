@@ -1348,3 +1348,136 @@ canvas {
   65% { width: 75%; }
   100% { width: 96%; }
 }
+
+
+/* ==========================================
+   READER: PAGE SLOTS, NOTES, NOTE SEARCH
+   (paste this at the very bottom of style.css)
+   ========================================== */
+.page-wrapper { scroll-margin-top: 64px; }
+
+.page-placeholder {
+  margin: auto;
+  padding: 40px 0;
+  color: #9aa4b2;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* Typing must work inside notes and the search box */
+input, textarea {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.page-note-trigger {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(15, 23, 42, 0.7);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.page-note-trigger.has-note {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #0f172a;
+}
+
+.page-note-panel {
+  position: absolute;
+  top: 46px;
+  right: 10px;
+  z-index: 20;
+  width: min(280px, calc(100% - 20px));
+  padding: 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid var(--border-glass-light);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.page-note-panel textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  border-radius: 8px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-input);
+  color: #fff;
+  padding: 8px;
+  font-size: 0.9rem;
+}
+
+.note-search-wrapper {
+  position: relative;
+  flex: 1 1 auto;
+  max-width: 320px;
+  margin: 0 12px;
+}
+
+.note-search-wrapper input {
+  height: 36px;
+  font-size: 0.85rem;
+  padding: 0 12px 0 34px;
+  border-radius: 18px;
+}
+
+.note-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.note-search-results {
+  position: absolute;
+  top: 42px;
+  left: 0;
+  right: 0;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid var(--border-glass-light);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 1100;
+}
+
+.note-result-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-glass);
+  color: #fff;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.note-result-item b { color: var(--accent); }
+.note-result-item span { color: var(--text-muted); }
+
+.note-result-empty {
+  padding: 12px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}

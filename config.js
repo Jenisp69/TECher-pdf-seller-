@@ -10,4 +10,5 @@ const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_
 const STORAGE_BUCKET = 'course-notes';
 
 // Used by the viewer to read PDF chunks straight from Google Drive (fast route)
-const GOOGLE_DRIVE_API_KEY = '';
+//const GOOGLE_DRIVE_API_KEY = '';
+const GOOGLE_DRIVE_API_KEY = 'AIzaSyDgHjD0liJB2rzBMy2YXLPhTnU5x_x2q7Y';

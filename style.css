@@ -20,6 +20,25 @@
   --success-hover: #059669;
   --radius: 12px;
   --transition: all 0.25s ease;
+
+  /* Theme-aware surfaces & controls (dark values = the original hard-coded colours) */
+  --surface-bar: rgba(9, 13, 22, 0.85);       /* reader top bar */
+  --surface-float: rgba(15, 23, 42, 0.85);    /* floating page toolbar */
+  --surface-mini: rgba(9, 13, 22, 0.7);       /* mini back button */
+  --surface-pop: rgba(15, 23, 42, 0.98);      /* search results + note panel */
+  --ctrl-bg: rgba(22, 30, 46, 0.65);          /* small buttons (Back, + / -, Pen...) */
+  --ctrl-bg-hover: rgba(30, 41, 59, 0.75);
+  --ctrl-text: #ffffff;
+  --pill-bg: rgba(255, 255, 255, 0.03);       /* filter pills */
+  --pill-bg-hover: rgba(255, 255, 255, 0.08);
+  --pill-border: rgba(255, 255, 255, 0.08);
+  --pill-border-hover: rgba(255, 255, 255, 0.18);
+  --star-off: rgba(255, 255, 255, 0.2);       /* feedback stars */
+  --star-on: #f59e0b;
+  --page-divider: rgba(255, 255, 255, 0.15);
+  --loader-text: #38bdf8;
+  --loader-shadow: 1px 1px 0px #000;
+  --pop-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 
 * {
@@ -438,8 +457,8 @@ body {
 }
 
 .pill-btn {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--pill-bg);
+  border: 1px solid var(--pill-border);
   color: var(--text-muted);
   padding: 4px 10px; /* Reduced pill padding */
   border-radius: 8px;
@@ -454,12 +473,13 @@ body {
 }
 
 .pill-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--pill-bg-hover);
   color: var(--text-main);
-  border-color: rgba(255, 255, 255, 0.18);
+  border-color: var(--pill-border-hover);
 }
 
-.pill-btn.active {
+.pill-btn.active,
+.pill-btn.active:hover {
   background: var(--accent);
   color: #ffffff;
   border-color: var(--accent);
@@ -539,6 +559,11 @@ body {
 .section-header-enrolled h2 { color: #60a5fa !important; }
 .section-header-free h2 { color: #34d399 !important; }
 .section-header-premium h2 { color: #fbbf24 !important; }
+
+/* Light mode: the bright heading colours above are unreadable on a pale background */
+:root[data-theme="light"] .section-header-enrolled h2 { color: #1d4ed8 !important; }
+:root[data-theme="light"] .section-header-free h2 { color: #047857 !important; }
+:root[data-theme="light"] .section-header-premium h2 { color: #b45309 !important; }
 
 /* ==========================================
    Course Grid & Tiered Action Cards
@@ -831,14 +856,14 @@ input:focus, select:focus {
 
 .star-btn {
   font-size: 1.2rem;
-  color: rgba(255, 255, 255, 0.2);
+  color: var(--star-off);
   cursor: pointer;
   transition: transform 0.15s ease, color 0.15s ease;
 }
 
 .star-btn:hover,
 .star-btn.active {
-  color: #f59e0b;
+  color: var(--star-on);
   transform: scale(1.15);
 }
 
@@ -1013,7 +1038,7 @@ canvas {
 .reader-nav {
   position: sticky;
   top: 0;
-  background: rgba(9, 13, 22, 0.85);
+  background: var(--surface-bar);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   padding: 12px 16px;
@@ -1037,9 +1062,9 @@ canvas {
 }
 
 .btn-sm {
-  background: var(--bg-glass);
+  background: var(--ctrl-bg);
   border: 1px solid var(--border-glass);
-  color: white;
+  color: var(--ctrl-text);
   padding: 8px 14px;
   border-radius: 8px;
   font-size: 0.85rem;
@@ -1051,7 +1076,7 @@ canvas {
 }
 
 .btn-sm:hover {
-  background: var(--bg-glass-hover);
+  background: var(--ctrl-bg-hover);
   border-color: var(--border-glass-light);
 }
 
@@ -1069,7 +1094,7 @@ canvas {
   border-radius: 8px; 
   background: var(--bg-input);
   border: 1px solid var(--border-glass);
-  color: #fff;
+  color: var(--text-main);
 }
 
 .page-count-text {
@@ -1101,7 +1126,7 @@ canvas {
   border-radius: 0;
   box-shadow: none;
   background: #ffffff;
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+  border-bottom: 1px dashed var(--page-divider);
 }
 
 .page-wrapper canvas {
@@ -1121,13 +1146,13 @@ canvas {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--surface-float);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-glass-light);
   padding: 8px 16px;
   border-radius: 30px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--pop-shadow);
   transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
@@ -1248,6 +1273,207 @@ canvas {
 
 
 
+/* ==========================================
+   13. Theme Toggle (Dark / Light)
+   ========================================== */
+.theme-toggle-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border-glass);
+  background: var(--bg-glass);
+  color: var(--text-main);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  transition: var(--transition);
+  margin-right: 8px;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Native form controls follow the theme */
+:root { color-scheme: dark; }
+
+/* ---------- LIGHT THEME VARIABLES ---------- */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-main: #f1f5f9;
+  --bg-glass: rgba(255, 255, 255, 0.8);
+  --bg-glass-hover: rgba(255, 255, 255, 0.95);
+  --bg-glass-card: rgba(15, 23, 42, 0.03);
+  --bg-input: #ffffff;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --accent: #2563eb;
+  --accent-glow: rgba(37, 99, 235, 0.25);
+  --accent-hover: #1d4ed8;
+  --border-glass: rgba(15, 23, 42, 0.12);
+  --border-glass-light: rgba(15, 23, 42, 0.2);
+
+  --surface-bar: rgba(255, 255, 255, 0.92);
+  --surface-float: rgba(255, 255, 255, 0.94);
+  --surface-mini: rgba(255, 255, 255, 0.9);
+  --surface-pop: #ffffff;
+  --ctrl-bg: rgba(15, 23, 42, 0.05);
+  --ctrl-bg-hover: rgba(15, 23, 42, 0.1);
+  --ctrl-text: #0f172a;
+  --pill-bg: rgba(15, 23, 42, 0.04);
+  --pill-bg-hover: rgba(15, 23, 42, 0.08);
+  --pill-border: rgba(15, 23, 42, 0.1);
+  --pill-border-hover: rgba(15, 23, 42, 0.18);
+  --star-off: rgba(15, 23, 42, 0.22);
+  --star-on: #f59e0b;
+  --page-divider: rgba(15, 23, 42, 0.15);
+  --loader-text: #0369a1;
+  --loader-shadow: none;
+  --pop-shadow: 0 10px 30px rgba(15, 23, 42, 0.18);
+}
+
+/* ---------- LIGHT THEME: hard-coded colours that need overriding ---------- */
+:root[data-theme="light"] .glass-navbar {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+:root[data-theme="light"] .glass-card {
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.08);
+}
+
+:root[data-theme="light"] .course-title {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .badge.enrolled { color: #1d4ed8; }
+:root[data-theme="light"] .badge.free { color: #047857; }
+:root[data-theme="light"] .badge.price { color: #b45309; }
+:root[data-theme="light"] .price-value.npr { color: #b45309; }
+
+:root[data-theme="light"] .btn-glass-accent {
+  color: #1e3a8a;
+  background: rgba(59, 130, 246, 0.12);
+}
+
+:root[data-theme="light"] input[type="text"],
+:root[data-theme="light"] input[type="password"],
+:root[data-theme="light"] input[type="tel"],
+:root[data-theme="light"] select {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .hero-mission-preview {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(15, 23, 42, 0.1);
+}
+
+:root[data-theme="light"] .btn-hero-mission {
+  color: var(--text-main);
+}
+
+:root[data-theme="light"] .btn-card-action {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .btn-card-action:hover {
+  color: #ffffff;
+}
+
+:root[data-theme="light"] .social-btn {
+  color: #0f172a;
+}
+
+:root[data-theme="light"] .social-btn.youtube { color: #991b1b; }
+:root[data-theme="light"] .social-btn.facebook { color: #1e40af; }
+:root[data-theme="light"] .social-btn.instagram { color: #9d174d; }
+:root[data-theme="light"] .social-btn.whatsapp { color: #065f46; }
+
+:root[data-theme="light"] .auth-tabs {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme="light"] .glass-modal {
+  background: rgba(255, 255, 255, 0.97);
+}
+
+:root[data-theme="light"] .price-display-box {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+:root[data-theme="light"] .section-container:not(:first-of-type)::before {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(15, 23, 42, 0.15) 20%,
+    rgba(15, 23, 42, 0.15) 80%,
+    transparent 100%
+  );
+}
+
+:root[data-theme="light"] .mission-divider {
+  background: rgba(15, 23, 42, 0.15);
+}
+
+:root[data-theme="light"] .btn-icon-danger {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+/* Keep navbar actions in a single row */
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+/* Remove the glass-card bottom margin from the navbar user pill so it centers with the toggle */
+.nav-actions .user-profile-pill {
+  margin: 0;
+}
+
+
+
+
+/* ==========================================
+   14. Mini Back Button (shows when scrolling up)
+   ========================================== */
+.mini-back-btn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1100;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border-glass-light);
+  background: var(--surface-mini);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--ctrl-text);
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.mini-back-btn.visible {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+
+
 
 /* ==========================================
    MINECRAFT PIXEL CHICKEN LOADER
@@ -1326,8 +1552,8 @@ canvas {
   font-family: monospace, sans-serif;
   font-size: 0.9rem;
   font-weight: bold;
-  color: #38bdf8;
-  text-shadow: 1px 1px 0px #000;
+  color: var(--loader-text);
+  text-shadow: var(--loader-shadow);
   text-align: center;
 }
 
@@ -1402,9 +1628,9 @@ input, textarea {
   width: min(280px, calc(100% - 20px));
   padding: 8px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.96);
+  background: var(--surface-pop);
   border: 1px solid var(--border-glass-light);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--pop-shadow);
 }
 
 .page-note-panel textarea {
@@ -1414,7 +1640,7 @@ input, textarea {
   border-radius: 8px;
   border: 1px solid var(--border-glass);
   background: var(--bg-input);
-  color: #fff;
+  color: var(--text-main);
   padding: 8px;
   font-size: 0.9rem;
 }
@@ -1450,10 +1676,10 @@ input, textarea {
   right: 0;
   max-height: 50vh;
   overflow-y: auto;
-  background: rgba(15, 23, 42, 0.98);
+  background: var(--surface-pop);
   border: 1px solid var(--border-glass-light);
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  box-shadow: var(--pop-shadow);
   z-index: 1100;
 }
 
@@ -1467,7 +1693,7 @@ input, textarea {
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--border-glass);
-  color: #fff;
+  color: var(--text-main);
   font-size: 0.82rem;
   text-align: left;
   cursor: pointer;

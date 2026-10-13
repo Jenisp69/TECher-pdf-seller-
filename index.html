@@ -5,11 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ThinkAhead Student Portal</title>
   <link rel="stylesheet" href="style.css">
+
+
+  <script>
+  (function () {
+    try {
+      var saved = localStorage.getItem('thinkahead_theme');
+      document.documentElement.setAttribute('data-theme', saved === 'light' ? 'light' : 'dark');
+    } catch (e) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+</script>
+
   
   <!-- Font Awesome & Libraries -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
 </head>
 <body>
 
@@ -28,6 +42,10 @@
       </div>
 
       <div class="nav-actions">
+<button id="theme-toggle-btn" class="theme-toggle-btn" type="button" title="Switch theme" aria-label="Switch theme">
+  <i class="fa-solid fa-sun"></i>
+</button>
+
         <!-- Guest State -->
         <button id="nav-login-btn" class="btn-glass-accent" onclick="openAuthModal('login')">
           <i class="fa-solid fa-right-to-bracket"></i>
@@ -169,10 +187,10 @@
           <div class="star-rating-picker">
             <span class="rating-label">Your Rating:</span>
             <div class="star-group">
-              <i class="fa-solid fa-star star-btn" data-value="1"></i>
-              <i class="fa-solid fa-star star-btn" data-value="2"></i>
-              <i class="fa-solid fa-star star-btn" data-value="3"></i>
-              <i class="fa-solid fa-star star-btn" data-value="4"></i>
+              <i class="fa-solid fa-star star-btn active" data-value="1"></i>
+              <i class="fa-solid fa-star star-btn active" data-value="2"></i>
+              <i class="fa-solid fa-star star-btn active" data-value="3"></i>
+              <i class="fa-solid fa-star star-btn active" data-value="4"></i>
               <i class="fa-solid fa-star star-btn active" data-value="5"></i>
             </div>
           </div>
@@ -362,6 +380,10 @@
 
     <div id="viewer-container"></div>
 
+     <button id="mini-back-btn" class="mini-back-btn" type="button" aria-label="Back to portal">
+      <i class="fa-solid fa-arrow-left"></i>
+    </button>
+
     <div class="floating-toolbar" id="floating-toolbar">
       <button id="floating-pen-btn" class="btn-sm">
         <i class="fa-solid fa-pen"></i>
@@ -384,5 +406,80 @@
   <script src="auth.js"></script>
   
   <script src="feedback.js"></script>
+
+  <script>
+  (function () {
+    var btn = document.getElementById('theme-toggle-btn');
+    if (!btn) return;
+
+    function currentTheme() {
+      return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    }
+
+    function renderIcon() {
+      var isLight = currentTheme() === 'light';
+      // Show the mode you will switch TO
+      btn.innerHTML = isLight ? '<i class="fa-solid fa-moon"></i>' : '<i class="fa-solid fa-sun"></i>';
+      var label = isLight ? 'Switch to dark mode' : 'Switch to light mode';
+      btn.title = label;
+      btn.setAttribute('aria-label', label);
+    }
+
+    btn.addEventListener('click', function () {
+      var next = currentTheme() === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('thinkahead_theme', next); } catch (e) {}
+      renderIcon();
+    });
+
+    renderIcon();
+  })();
+</script>
+
+<script>
+(function () {
+  var miniBtn = document.getElementById('mini-back-btn');
+  var backBtn = document.getElementById('back-to-dash-btn');
+  var readerSection = document.getElementById('reader-section');
+  if (!miniBtn || !backBtn || !readerSection) return;
+
+  var lastY = window.scrollY;
+  var ticking = false;
+
+  function setVisible(show) {
+    miniBtn.classList.toggle('visible', show);
+  }
+
+  function onScroll() {
+    ticking = false;
+    var y = window.scrollY;
+    var delta = y - lastY;
+
+    if (readerSection.classList.contains('hidden') || y <= 80) {
+      setVisible(false);          // at the top, the original back button is already visible
+    } else if (delta < -6) {
+      setVisible(true);           // scrolling up
+    } else if (delta > 6) {
+      setVisible(false);          // scrolling down
+    }
+
+    if (Math.abs(delta) > 6 || y <= 80) lastY = y;
+  }
+
+  window.addEventListener('scroll', function () {
+    if (!ticking) {
+      ticking = true;
+      requestAnimationFrame(onScroll);
+    }
+  }, { passive: true });
+
+  // Reuse the existing back handler from auth.js
+  miniBtn.addEventListener('click', function () {
+    setVisible(false);
+    backBtn.click();
+  });
+})();
+</script>
+
 </body>
 </html>

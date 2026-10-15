@@ -77,21 +77,29 @@ function getGoogleDriveId(urlOrId) {
     return `note_${storageScope()}_p`;
   }
 
-  // Older versions saved pen strokes and notes without the student's id, so every student
-  // on the same device shared them. Move them once to the student who opens the book now.
-  function migrateLegacyStorage() {
+  // Older versions saved pen strokes and notes under the book's NAME (and the very first ones
+  // without the student's id at all). Move them once to this student + the book's id.
+  function migrateLegacyStorage(subjectName) {
     try {
-      const kinds = [
-        { kind: 'strokes', prefix: `strokes_${activeSubjectId}_p` },
-        { kind: 'note', prefix: `note_${activeSubjectId}_p` }
-      ];
+      const rules = [];
+      [...new Set([subjectName, activeSubjectId].filter(Boolean))].forEach((name) => {
+        // oldest format: no student id
+        rules.push({ kind: 'strokes', prefix: `strokes_${name}_p` });
+        rules.push({ kind: 'note', prefix: `note_${name}_p` });
+      });
+      if (subjectName && subjectName !== activeSubjectId) {
+        // previous format: student id + book name
+        rules.push({ kind: 'strokes', prefix: `strokes_${activeStudentId}_${subjectName}_p` });
+        rules.push({ kind: 'note', prefix: `note_${activeStudentId}_${subjectName}_p` });
+      }
+
       const moves = [];
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i);
         if (!key) continue;
-        for (const k of kinds) {
-          if (key.startsWith(k.prefix)) {
-            moves.push([key, `${k.kind}_${storageScope()}_p${key.slice(k.prefix.length)}`]);
+        for (const rule of rules) {
+          if (key.startsWith(rule.prefix)) {
+            moves.push([key, `${rule.kind}_${storageScope()}_p${key.slice(rule.prefix.length)}`]);
           }
         }
       }
@@ -118,10 +126,249 @@ function getGoogleDriveId(urlOrId) {
     const strokes = getSavedStrokes(pageNum);
     strokes.push(strokeData);
     localStorage.setItem(getStrokeStorageKey(pageNum), JSON.stringify(strokes));
+    markDirty('s', pageNum);
   }
 
   function clearSavedStrokes(pageNum) {
     localStorage.removeItem(getStrokeStorageKey(pageNum));
+    markDirty('s', pageNum);
+  }
+
+  const CLOUD_SYNC_ENABLED = true;   // set to false to switch ALL online saving off (notes then stay on the device only)
+  const CLOUD_PULL_DELAY_MS = 1500; // fetch saved notes this long AFTER the book opens, so they never slow the book down
+  const SYNC_DELAY_MS = 2000;       // wait this long after the last change before saving online
+  const SYNC_BATCH_PAGES = 25;      // pages sent in one request
+  const SYNC_MAX_FAILURES = 8;      // give up for this visit after this many failed attempts in a row
+  const STROKE_SCALE = 10000;       // pen points are saved as whole numbers (1 = 0.01% of the page)
+  const STROKE_MIN_STEP = 6;        // pen points closer than this are skipped (about 1 pixel)
+
+  // Describes the book that is open: { studentId, token, subjectId, scope }. null = no online saving.
+  let cloud = null;
+  let syncTimer = null;
+  let lastPullAt = 0;
+
+  // Pages with changes that are not saved online yet. Kept on the device so nothing is lost if the tab closes.
+  // Keys look like "n12" (note on page 12) or "s12" (pen strokes on page 12); the value counts the changes.
+  function readDirty(ctx) {
+    try {
+      return JSON.parse(localStorage.getItem(`dirty_${ctx.scope}`) || '{}') || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function writeDirty(ctx, dirty) {
+    try {
+      if (Object.keys(dirty).length) localStorage.setItem(`dirty_${ctx.scope}`, JSON.stringify(dirty));
+      else localStorage.removeItem(`dirty_${ctx.scope}`);
+    } catch (e) {
+      // storage problems must never stop reading
+    }
+  }
+
+  // kind: 'n' = note, 's' = pen strokes
+  function markDirty(kind, pageNum) {
+    if (!cloud) return;
+    const dirty = readDirty(cloud);
+    const key = `${kind}${pageNum}`;
+    dirty[key] = (dirty[key] || 0) + 1;
+    writeDirty(cloud, dirty);
+    scheduleSync();
+  }
+
+  function scheduleSync() {
+    if (!cloud) return;
+    const ctx = cloud;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(() => cloudPush(ctx), SYNC_DELAY_MS);
+  }
+
+  function readLocalStrokes(scope, page) {
+    try {
+      return JSON.parse(localStorage.getItem(`strokes_${scope}_p${page}`) || '[]');
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Pen strokes are saved in a compact form: whole numbers, each point stored as the
+  // distance from the previous one, and points closer than about a pixel skipped.
+  function packStrokes(strokes) {
+    const packed = [];
+    (strokes || []).forEach((stroke) => {
+      if (!stroke || stroke.length < 2) return;
+      const out = [];
+      let px = 0;
+      let py = 0;
+      stroke.forEach((pt, i) => {
+        const x = Math.round(pt.x * STROKE_SCALE);
+        const y = Math.round(pt.y * STROKE_SCALE);
+        const isFirst = out.length === 0;
+        const isLast = i === stroke.length - 1;
+        if (!isFirst && !isLast && Math.abs(x - px) + Math.abs(y - py) < STROKE_MIN_STEP) return;
+        out.push(isFirst ? x : x - px, isFirst ? y : y - py);
+        px = x;
+        py = y;
+      });
+      if (out.length >= 4) packed.push(out);
+    });
+    return JSON.stringify(packed);
+  }
+
+  function unpackStrokes(text) {
+    try {
+      return JSON.parse(text || '[]').map((flat) => {
+        const stroke = [];
+        let x = 0;
+        let y = 0;
+        for (let i = 0; i + 1 < flat.length; i += 2) {
+          x += flat[i];
+          y += flat[i + 1];
+          stroke.push({ x: x / STROKE_SCALE, y: y / STROKE_SCALE });
+        }
+        return stroke;
+      }).filter((stroke) => stroke.length > 1);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  // Send the unsaved pages to the database
+  async function cloudPush(ctx) {
+    if (!ctx || ctx.disabled || ctx.pushing) return;
+    ctx.pushing = true;
+    try {
+      for (let round = 0; round < 40; round++) {
+        const dirty = readDirty(ctx);
+        const keys = Object.keys(dirty);
+        if (!keys.length) break;
+
+        const pages = [...new Set(keys.map((k) => parseInt(k.slice(1), 10)))].slice(0, SYNC_BATCH_PAGES);
+        const items = pages.map((page) => {
+          const item = { page };
+          // an empty note / empty strokes list means "deleted" and is saved as such
+          if (dirty['n' + page]) item.note = localStorage.getItem(`note_${ctx.scope}_p${page}`) || '';
+          if (dirty['s' + page]) item.strokes = packStrokes(readLocalStrokes(ctx.scope, page));
+          return item;
+        });
+
+        const { data, error } = await supabaseClient.rpc('save_my_annotations', {
+          p_student_id: ctx.studentId,
+          p_token: ctx.token,
+          p_subject_id: ctx.subjectId,
+          p_items: items
+        });
+        if (error) throw error;
+        if (!data || data.ok !== true) {
+          if (data && data.error === 'bad_token') { ctx.disabled = true; return; } // logged in somewhere else
+          throw new Error((data && data.error) || 'Unknown error');
+        }
+        if (data.skipped && data.skipped.length) {
+          console.warn('Some pages could not be saved online (too big):', data.skipped);
+        }
+
+        // Forget what was sent, unless it changed again while sending
+        const now = readDirty(ctx);
+        keys.forEach((k) => {
+          if (pages.includes(parseInt(k.slice(1), 10)) && now[k] === dirty[k]) delete now[k];
+        });
+        writeDirty(ctx, now);
+        ctx.failures = 0;
+      }
+    } catch (e) {
+      ctx.failures = (ctx.failures || 0) + 1;
+      console.warn('Saving notes online failed, will retry:', e);
+      if (ctx.failures >= SYNC_MAX_FAILURES) {
+        ctx.disabled = true; // the unsent list stays on the device and is tried again next time
+      } else {
+        setTimeout(() => cloudPush(ctx), Math.min(SYNC_DELAY_MS * Math.pow(2, ctx.failures), 5 * 60 * 1000));
+      }
+    } finally {
+      ctx.pushing = false;
+    }
+  }
+
+  // Get this student's notes and pen strokes for the open book from the database
+  async function cloudPull(ctx) {
+    if (!ctx || ctx.disabled) return;
+    try {
+      const { data, error } = await supabaseClient.rpc('get_my_annotations', {
+        p_student_id: ctx.studentId,
+        p_token: ctx.token,
+        p_subject_id: ctx.subjectId
+      });
+      if (error) throw error;
+      if (!data || data.ok !== true) {
+        if (data && data.error === 'bad_token') ctx.disabled = true;
+        return;
+      }
+      lastPullAt = Date.now();
+
+      const dirty = readDirty(ctx);
+      const changedPages = new Set();
+      const knownNote = new Set();
+      const knownStrokes = new Set();
+
+      // The database wins, except for pages with changes on this device that are not saved yet
+      (data.rows || []).forEach((row) => {
+        const page = row.page;
+
+        if (row.note !== null && row.note !== undefined) {
+          knownNote.add(page);
+          if (!dirty['n' + page]) {
+            const key = `note_${ctx.scope}_p${page}`;
+            if ((localStorage.getItem(key) || '') !== row.note) {
+              if (row.note) localStorage.setItem(key, row.note);
+              else localStorage.removeItem(key);
+              changedPages.add(page);
+            }
+          }
+        }
+
+        if (row.strokes !== null && row.strokes !== undefined) {
+          knownStrokes.add(page);
+          if (!dirty['s' + page]) {
+            if (packStrokes(readLocalStrokes(ctx.scope, page)) !== row.strokes) {
+              const key = `strokes_${ctx.scope}_p${page}`;
+              const strokes = unpackStrokes(row.strokes);
+              if (strokes.length) localStorage.setItem(key, JSON.stringify(strokes));
+              else localStorage.removeItem(key);
+              changedPages.add(page);
+            }
+          }
+        }
+      });
+
+      // Anything written on this device that the database has never seen is sent up once
+      const notePrefix = `note_${ctx.scope}_p`;
+      const strokePrefix = `strokes_${ctx.scope}_p`;
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key) continue;
+        if (key.startsWith(notePrefix)) {
+          const page = parseInt(key.slice(notePrefix.length), 10);
+          if (!isNaN(page) && !knownNote.has(page) && !dirty['n' + page] && localStorage.getItem(key)) dirty['n' + page] = 1;
+        } else if (key.startsWith(strokePrefix)) {
+          const page = parseInt(key.slice(strokePrefix.length), 10);
+          if (!isNaN(page) && !knownStrokes.has(page) && !dirty['s' + page] && readLocalStrokes(ctx.scope, page).length) dirty['s' + page] = 1;
+        }
+      }
+      writeDirty(ctx, dirty);
+      if (Object.keys(dirty).length) setTimeout(() => cloudPush(ctx), SYNC_DELAY_MS);
+
+      // Redraw pages on screen whose notes or strokes just changed
+      if (cloud === ctx) {
+        changedPages.forEach((page) => {
+          const wrapper = pageWrappers[page - 1];
+          if (wrapper && wrapper.dataset.rendered === 'true') {
+            unloadOffscreenCanvas(wrapper);
+            if (visiblePages.has(page)) renderSinglePage(page, wrapper);
+          }
+        });
+      }
+    } catch (e) {
+      console.warn('Loading notes from the database failed (they stay on this device):', e);
+    }
   }
 
   function redrawSavedStrokes(canvas, pageNum) {
@@ -155,10 +402,19 @@ window.initReader = async function (sessionData) {
   const viewerContainer = document.getElementById('viewer-container');
   if (!viewerContainer || !sessionData || !sessionData.pdfPath) return;
 
+  // Send anything still waiting from the previous book before switching
+  if (cloud) cloudPush(cloud);
+
   zoomMultiplier = 1.0;
-  activeSubjectId = sessionData.subjectName || 'course_doc';
+  activeSubjectId = sessionData.subjectId || sessionData.subjectName || 'course_doc';
   activeStudentId = sessionData.studentId || 'guest';
-  migrateLegacyStorage();
+  migrateLegacyStorage(sessionData.subjectName);
+
+  // Online saving: only for logged-in students, and only when the book's real id is known
+  const syncToken = sessionData.sessionToken || '';
+  cloud = (CLOUD_SYNC_ENABLED && activeStudentId !== 'guest' && syncToken && sessionData.subjectId && typeof supabaseClient !== 'undefined')
+    ? { studentId: activeStudentId, token: syncToken, subjectId: activeSubjectId, scope: storageScope() }
+    : null;
   pageWrappers = [];
   visiblePages.clear();
   const searchBox = document.getElementById('note-search-input');
@@ -301,6 +557,12 @@ window.initReader = async function (sessionData) {
 
     preloadEnabled = true;
     updateCurrentPage();   // page 1: starts loading the pieces ahead
+
+    // Lowest priority: bring in notes and pen strokes saved on other devices a moment after the book is open
+    if (cloud) {
+      const pullCtx = cloud;
+      setTimeout(() => { if (cloud === pullCtx) cloudPull(pullCtx); }, CLOUD_PULL_DELAY_MS);
+    }
 
   } catch (err) {
     clearInterval(progressInterval); // Clean up timer on error
@@ -671,6 +933,7 @@ window.initReader = async function (sessionData) {
         if (text.trim()) localStorage.setItem(noteKey, text);
         else localStorage.removeItem(noteKey);
         noteTrigger.classList.toggle('has-note', text.trim().length > 0);
+        markDirty('n', globalPageNum);
       });
 
       // Clicking inside the note must not hide the toolbar
@@ -1109,6 +1372,19 @@ function initToolbarToggle() {
  
 
   document.getElementById('back-to-dash-btn')?.addEventListener('click', stopReaderLoading);
+
+  // Save the notes online when the student leaves the book, switches app, or the internet returns
+  document.getElementById('back-to-dash-btn')?.addEventListener('click', () => { if (cloud) cloudPush(cloud); });
+  window.addEventListener('pagehide', () => { if (cloud) cloudPush(cloud); });
+  window.addEventListener('online', () => { if (cloud) cloudPush(cloud); });
+  document.addEventListener('visibilitychange', () => {
+    if (!cloud) return;
+    if (document.visibilityState === 'hidden') {
+      cloudPush(cloud);                              // before the phone puts the page to sleep
+    } else if (Date.now() - lastPullAt > 60000) {
+      cloudPull(cloud);                              // pick up changes made on another device
+    }
+  });
 
   function showError(msg) {
     const viewerContainer = document.getElementById('viewer-container');

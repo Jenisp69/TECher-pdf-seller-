@@ -387,6 +387,7 @@ function openCourseViewer(student, subjectId) {
     studentName: student?.full_name || 'Guest User',
     studentPhone: student?.phone_number || '',
     username: student?.username || 'guest',
+    subjectId: subject.id,
     subjectName: subject.subject_name,
     pdfPath: subject.pdf_storage_path,
     studentId: student?.id || 'guest',

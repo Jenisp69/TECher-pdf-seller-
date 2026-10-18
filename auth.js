@@ -4,6 +4,11 @@ let allSubjectsCache = [];
 let userEnrollmentsSet = new Set();
 let activePaymentSubject = null;
 let globalSessionGuardInterval = null;
+let openingBook = false;
+
+// The course list shows these columns to everyone. Where a book's file is stored is NOT public:
+// it is only given (by get_book_path) to students allowed to read that book.
+const SUBJECT_COLUMNS = 'id, subject_name, total_pages, class_level, stream_id, semester, price_npr, is_free, last_updated';
 
 /* ==========================================
    GLOBAL SESSION GUARD
@@ -18,13 +23,13 @@ function startGlobalSessionGuard() {
     if (!studentId || !sessionToken || typeof supabaseClient === 'undefined') return;
 
     try {
-      const { data, error } = await supabaseClient
-        .from('students')
-        .select('active_session_token')
-        .eq('id', studentId)
-        .single();
+      const { data, error } = await supabaseClient.rpc('student_session_ok', {
+        p_id: studentId,
+        p_token: sessionToken
+      });
 
-      if (error || !data || data.active_session_token !== sessionToken) {
+      // A bad connection must not log the student out; only a clear "no" from the server does
+      if (!error && data === false) {
         clearInterval(globalSessionGuardInterval);
         alert('Your account was logged in from another device or location.');
         sessionStorage.clear();
@@ -84,6 +89,57 @@ function switchAuthTab(tab) {
   }
 }
 
+// Remember the logged-in student in this tab and show the dashboard.
+// Only harmless details are kept in the browser (never the password).
+function startStudentSession(student, token) {
+  const safeStudent = {
+    id: student.id,
+    username: student.username,
+    full_name: student.full_name,
+    phone_number: student.phone_number,
+    active_session_token: token
+  };
+
+  sessionStorage.setItem('student_user', JSON.stringify(safeStudent));
+  sessionStorage.setItem('studentId', safeStudent.id);
+  sessionStorage.setItem('sessionToken', token);
+
+  currentStudentUser = safeStudent;
+  closeAuthModal();
+  updateUIForUser(safeStudent);
+  startGlobalSessionGuard();
+}
+
+// Teacher login from the normal sign-in box (teachers use an email address, students never do)
+async function handleTeacherLogin(email, password, errorDiv) {
+  const show = (message) => {
+    errorDiv.textContent = message;
+    errorDiv.classList.remove('hidden');
+  };
+
+  try {
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) {
+      show(/invalid login credentials/i.test(error.message || '')
+        ? 'Invalid email or password.'
+        : 'Sign-in problem: ' + (error.message || 'unknown error'));
+      return;
+    }
+
+    const { data: isAdmin } = await supabaseClient.rpc('is_admin');
+    if (isAdmin !== true) {
+      await supabaseClient.auth.signOut();
+      show('This account is not allowed to manage the site.');
+      return;
+    }
+
+    // The dashboard page sees the teacher is already signed in and opens straight away
+    window.location.href = 'admin.html';
+  } catch (e) {
+    show('Could not reach the server. Please check your internet and try again.');
+  }
+}
+
 // Login Handler
 async function handleLogin(event) {
   event.preventDefault();
@@ -94,42 +150,34 @@ async function handleLogin(event) {
 
   errorDiv.classList.add('hidden');
 
-  if (identifier === 'adminisgod' && password === 'godisadmin') {
-    window.location.href = 'admin.html';
+  // Teacher shortcut: an email address in this box means "teacher login".
+  // The teacher signs in right here and is taken straight to the dashboard.
+  if (identifier.includes('@')) {
+    await handleTeacherLogin(identifier, document.getElementById('password-input').value, errorDiv);
     return;
   }
 
-  const cleanPhone = identifier.replace(/[^0-9]/g, '');
+  // The server checks the password and starts the session (the database is never read directly)
+  const { data, error } = await supabaseClient.rpc('student_login', {
+    p_identifier: identifier,
+    p_password: password
+  });
 
-  const { data: students, error } = await supabaseClient
-    .from('students')
-    .select('*')
-    .eq('password', password)
-    .or(`username.eq.${identifier},phone_number.eq.${identifier},username.eq.${cleanPhone},full_name.ilike.%${identifier}%`);
-
-  if (error || !students || students.length === 0) {
-    errorDiv.textContent = 'Invalid username/phone or password. Please check your credentials.';
+  if (error || !data) {
+    errorDiv.textContent = 'Could not reach the server. Please check your internet and try again.';
     errorDiv.classList.remove('hidden');
     return;
   }
 
-  const student = students[0];
-  const sessionToken = crypto.randomUUID();
+  if (data.ok !== true) {
+    errorDiv.textContent = data.error === 'locked'
+      ? 'Too many wrong attempts. Please wait 15 minutes and try again.'
+      : 'Invalid username/phone or password. Please check your credentials.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
 
-  await supabaseClient
-    .from('students')
-    .update({ active_session_token: sessionToken })
-    .eq('id', student.id);
-
-  student.active_session_token = sessionToken;
-  sessionStorage.setItem('student_user', JSON.stringify(student));
-  sessionStorage.setItem('studentId', student.id);
-  sessionStorage.setItem('sessionToken', sessionToken);
-
-  currentStudentUser = student;
-  closeAuthModal();
-  updateUIForUser(student);
-  startGlobalSessionGuard();
+  startStudentSession(data.student, data.token);
 }
 
 /* ==========================================
@@ -156,7 +204,7 @@ async function updateUIForUser(student) {
 
   // Parallelize initial fetch calls to eliminate network waterfalls
   const fetchPromises = [
-    supabaseClient.from('subjects').select('*')
+    supabaseClient.from('subjects').select(SUBJECT_COLUMNS)
   ];
 
   if (window.CatalogFilter) {
@@ -165,10 +213,10 @@ async function updateUIForUser(student) {
 
   if (student) {
     fetchPromises.push(
-      supabaseClient
-        .from('student_courses')
-        .select('subject_id')
-        .eq('student_id', student.id)
+      supabaseClient.rpc('get_my_course_ids', {
+        p_id: student.id,
+        p_token: sessionStorage.getItem('sessionToken') || ''
+      })
     );
   }
 
@@ -192,7 +240,7 @@ async function updateUIForUser(student) {
     enrolledSec?.classList.remove('hidden');
 
     const enrollmentsRes = results[results.length - 1];
-    userEnrollmentsSet = new Set((enrollmentsRes?.data || []).map(e => e.subject_id));
+    userEnrollmentsSet = new Set(enrollmentsRes?.data?.ids || []);
   } else {
     loginBtn?.classList.remove('hidden');
     userProfile?.classList.add('hidden');
@@ -376,26 +424,52 @@ function confirmPaymentRequest() {
 }
 
 // Course Viewer Launcher
-function openCourseViewer(student, subjectId) {
+async function openCourseViewer(student, subjectId) {
   const subject = allSubjectsCache.find(s => s.id === subjectId);
-  if (!subject) return;
+  if (!subject || openingBook) return;
+  openingBook = true;
 
-  document.getElementById('homepage-section')?.classList.add('hidden');
-  document.getElementById('reader-section')?.classList.remove('hidden');
+  try {
+    const sessionToken = sessionStorage.getItem('sessionToken') || student?.active_session_token || '';
 
-  const sessionData = {
-    studentName: student?.full_name || 'Guest User',
-    studentPhone: student?.phone_number || '',
-    username: student?.username || 'guest',
-    subjectId: subject.id,
-    subjectName: subject.subject_name,
-    pdfPath: subject.pdf_storage_path,
-    studentId: student?.id || 'guest',
-    sessionToken: sessionStorage.getItem('sessionToken') || student?.active_session_token || ''
-  };
+    // The server only answers for free books or books this student is enrolled in
+    const { data, error } = await supabaseClient.rpc('get_book_path', {
+      p_id: student?.id,
+      p_token: sessionToken,
+      p_subject_id: subject.id
+    });
 
-  if (typeof window.initReader === 'function') {
-    window.initReader(sessionData);
+    if (error || !data || data.ok !== true) {
+      const reason = data && data.error;
+      if (reason === 'not_enrolled') {
+        alert('You are not enrolled in this course yet. Please contact the teacher to unlock it.');
+      } else if (reason === 'bad_token') {
+        alert('Your login has ended. Please log in again.');
+      } else {
+        alert('Could not open this book. Please check your internet and try again.');
+      }
+      return;
+    }
+
+    document.getElementById('homepage-section')?.classList.add('hidden');
+    document.getElementById('reader-section')?.classList.remove('hidden');
+
+    const sessionData = {
+      studentName: student?.full_name || 'Guest User',
+      studentPhone: student?.phone_number || '',
+      username: student?.username || 'guest',
+      subjectId: subject.id,
+      subjectName: subject.subject_name,
+      pdfPath: data.path,
+      studentId: student?.id || 'guest',
+      sessionToken
+    };
+
+    if (typeof window.initReader === 'function') {
+      window.initReader(sessionData);
+    }
+  } finally {
+    openingBook = false;
   }
 }
 
@@ -439,39 +513,35 @@ document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) 
     return;
   }
 
-  const generatedUsername = phone.replace(/[^0-9]/g, '');
-  const sessionToken = crypto.randomUUID();
-  
-  const studentPayload = {
-    username: generatedUsername,
-    password,
-    full_name: name,
-    phone_number: phone,
-    active_session_token: sessionToken
-  };
+  const { data, error } = await supabaseClient.rpc('student_signup', {
+    p_name: name,
+    p_phone: phone,
+    p_password: password
+  });
 
-  const { data: student, error: insertError } = await supabaseClient
-    .from('students')
-    .upsert([studentPayload], { onConflict: 'username' })
-    .select()
-    .single();
-
-  if (insertError) {
+  if (error || !data) {
     if (errorDiv) {
-      errorDiv.textContent = `Account creation failed: ${insertError.message}`;
+      errorDiv.textContent = 'Could not reach the server. Please check your internet and try again.';
       errorDiv.classList.remove('hidden');
     }
     return;
   }
 
-  sessionStorage.setItem('student_user', JSON.stringify(student));
-  sessionStorage.setItem('studentId', student.id);
-  sessionStorage.setItem('sessionToken', sessionToken);
+  if (data.ok !== true) {
+    const messages = {
+      exists: 'This phone number already has an account. Please sign in, or ask your teacher to reset your password.',
+      invalid_name: 'Please enter your full name.',
+      invalid_phone: 'Please enter a valid phone number.',
+      weak_password: 'Your password must be at least 6 characters.'
+    };
+    if (errorDiv) {
+      errorDiv.textContent = messages[data.error] || 'Account creation failed. Please try again.';
+      errorDiv.classList.remove('hidden');
+    }
+    return;
+  }
 
-  currentStudentUser = student;
-  closeAuthModal();
-  updateUIForUser(student);
-  startGlobalSessionGuard();
+  startStudentSession(data.student, data.token);
 });
 
 document.getElementById('dash-logout-btn')?.addEventListener('click', () => {

@@ -1087,54 +1087,99 @@ async function addSubjectToSelectedStudent(subjectId) {
   }
 }
 
-(function enforceStrictLock() {
-  const isUnlocked = sessionStorage.getItem('admin_authenticated');
-  
-  if (!isUnlocked) {
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    
-    const devToolsCheck = setInterval(() => {
-      const overlay = document.getElementById('admin-lock-overlay');
-      const authenticated = sessionStorage.getItem('admin_authenticated');
-      
-      if (!authenticated && (!overlay || overlay.style.display === 'none')) {
-        clearInterval(devToolsCheck);
-        alert('Security violation: DevTools bypass detected.');
-        window.location.href = 'index.html';
-      }
-    }, 500);
-  } else {
-    window.addEventListener('DOMContentLoaded', () => {
-      const overlay = document.getElementById('admin-lock-overlay');
-      if (overlay) overlay.remove();
-    });
+/* ==========================================
+   ADMIN SIGN-IN
+   A real login (Supabase Authentication). The DATABASE itself checks every
+   request, so even someone who edits this page in their browser cannot read
+   or change anything without being signed in as the teacher.
+   ========================================== */
+
+// Is there a valid teacher session right now?
+async function isSignedInAsAdmin() {
+  try {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    if (!sessionData || !sessionData.session) return false;
+    const { data, error } = await supabaseClient.rpc('is_admin');
+    return !error && data === true;
+  } catch (e) {
+    return false;
   }
-})();
+}
+
+// Turn Supabase's sign-in error into a message that says what to check
+function describeSignInError(error) {
+  const text = (error && error.message ? error.message : '').toLowerCase();
+  if (text.includes('invalid login credentials')) {
+    return 'Wrong email or password. (If you are sure they are right, set a new password for this user in Supabase: Authentication, Users.)';
+  }
+  if (text.includes('not confirmed')) {
+    return 'This account is not confirmed yet. In Supabase open Authentication, Users, open this user and confirm it (or create it again with Auto Confirm ticked).';
+  }
+  if (text.includes('disabled')) {
+    return 'Email sign-in is switched off in Supabase. Open Authentication, Sign In / Providers, and make sure the Email provider is ENABLED (only "Allow new users to sign up" should be off).';
+  }
+  return 'Sign-in problem: ' + (error && error.message ? error.message : 'unknown error');
+}
+
+// Extra alarm (the real protection is the database): if the lock screen is removed
+// without signing in, show a warning and send the visitor away
+let adminUnlocked = false;
+const lockScreenWatch = setInterval(() => {
+  if (adminUnlocked) { clearInterval(lockScreenWatch); return; }
+  if (!document.getElementById('admin-lock-overlay')) {
+    clearInterval(lockScreenWatch);
+    alert('Security violation: the lock screen was removed.');
+    window.location.href = 'index.html';
+  }
+}, 500);
+
+// Remove the lock screen and load the dashboard
+function unlockAdminPage() {
+  adminUnlocked = true;
+  document.getElementById('admin-lock-overlay')?.remove();
+  document.documentElement.style.overflow = '';
+  document.body.style.overflow = '';
+  initAdmin();
+}
 
 async function handleAdminLogin(event) {
   event.preventDefault();
-  const user = document.getElementById('admin-user-input').value.trim();
-  const pass = document.getElementById('admin-pass-input').value.trim();
+  const email = document.getElementById('admin-user-input').value.trim();
+  const password = document.getElementById('admin-pass-input').value;
   const errorDiv = document.getElementById('admin-lock-error');
+  const submitBtn = event.target.querySelector('button[type="submit"]');
 
   errorDiv.style.display = 'none';
+  if (submitBtn) submitBtn.disabled = true;
 
-  if (user === 'adminisgod' && pass === 'godisadmin') {
-    sessionStorage.setItem('admin_authenticated', 'true');
-    
-    const overlay = document.getElementById('admin-lock-overlay');
-    if (overlay) overlay.remove();
+  try {
+    const { error } = await supabaseClient.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(describeSignInError(error));
 
-    document.documentElement.style.overflow = '';
-    document.body.style.overflow = '';
-
-    initAdmin();
-  } else {
-    errorDiv.textContent = 'Invalid Admin ID or Password.';
+    if (!(await isSignedInAsAdmin())) {
+      await supabaseClient.auth.signOut();
+      throw new Error('This account is not allowed to manage the site.');
+    }
+    unlockAdminPage();
+  } catch (err) {
+    errorDiv.textContent = err.message || 'Sign-in failed. Please try again.';
     errorDiv.style.display = 'block';
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
+
+async function adminSignOut() {
+  await supabaseClient.auth.signOut();
+  location.reload();
+}
+
+// The page stays locked (no scrolling, lock screen on top) until a valid teacher session is confirmed
+document.documentElement.style.overflow = 'hidden';
+document.body.style.overflow = 'hidden';
+window.addEventListener('DOMContentLoaded', async () => {
+  if (await isSignedInAsAdmin()) unlockAdminPage();
+});
 
 async function fetchAndRenderFeedback() {
   const container = document.getElementById('admin-feedback-list');
@@ -1185,4 +1230,3 @@ function arrayBufferToBase64(buffer) {
   }
   return window.btoa(binary);
 }
-window.addEventListener('DOMContentLoaded', initAdmin);

@@ -19,6 +19,7 @@
       <img src="resources/thinkaheadlogo.jpeg" alt="ThinkAhead Logo" class="app-logo" onerror="this.style.display='none'">
       <h1 class="app-title">Teacher Admin Portal</h1>
       <p class="app-subtitle">Manage Student Accounts & Dynamic Courses</p>
+      <button type="button" onclick="adminSignOut()" style="width:auto;height:32px;padding:0 14px;font-size:0.8rem;background:#475569;margin-top:10px;">Sign out</button>
     </div>
 
     <!-- CARD 1: CONSOLIDATED STREAMS & SUBJECTS MANAGER -->
@@ -353,13 +354,13 @@
       
       <form id="admin-lock-form" onsubmit="handleAdminLogin(event)">
         <div style="margin-bottom: 15px; text-align: left;">
-          <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Admin ID / Username</label>
-          <input type="text" id="admin-user-input" required autocomplete="off">
+          <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Admin email</label>
+          <input type="text" id="admin-user-input" inputmode="email" required autocomplete="username">
         </div>
         
         <div style="margin-bottom: 20px; text-align: left;">
           <label style="font-size: 0.8rem; color: #cbd5e1; display: block; margin-bottom: 5px;">Password</label>
-          <input type="password" id="admin-pass-input" required>
+          <input type="password" id="admin-pass-input" required autocomplete="current-password">
         </div>
 
         <div id="admin-lock-error" style="color: #ef4444; font-size: 0.85rem; margin-bottom: 15px; display: none;"></div>

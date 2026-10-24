@@ -425,6 +425,8 @@
       btn.setAttribute('aria-label', label);
     }
 
+
+
     btn.addEventListener('click', function () {
       var next = currentTheme() === 'light' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', next);

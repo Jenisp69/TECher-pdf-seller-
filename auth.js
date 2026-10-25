@@ -89,6 +89,64 @@ function switchAuthTab(tab) {
   }
 }
 
+/* ==========================================
+   GOOGLE SIGN-IN
+   Google -> Supabase checks it -> the database says which student this is
+   (student_google_login) -> the same student session the password login gives.
+   The temporary Supabase sign-in is then dropped so the rest of the site works as before.
+   ========================================== */
+async function signInWithGoogle() {
+  const errorDiv = document.getElementById('login-error');
+  if (errorDiv) errorDiv.classList.add('hidden');
+  try {
+    sessionStorage.setItem('google_login_pending', '1');
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin + window.location.pathname,
+        queryParams: { prompt: 'select_account' }
+      }
+    });
+    if (error) throw error;
+  } catch (e) {
+    sessionStorage.removeItem('google_login_pending');
+    if (errorDiv) {
+      errorDiv.textContent = 'Could not start Google sign-in. Please try again.';
+      errorDiv.classList.remove('hidden');
+    }
+  }
+}
+
+// Runs when the page loads after coming back from Google. Returns true if a student was signed in.
+async function finishGoogleLogin() {
+  if (!sessionStorage.getItem('google_login_pending')) return false;
+  sessionStorage.removeItem('google_login_pending');
+
+  try {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    if (!sessionData || !sessionData.session) return false;
+
+    const { data, error } = await supabaseClient.rpc('student_google_login');
+    await supabaseClient.auth.signOut({ scope: 'local' }); // the temporary sign-in is no longer needed
+
+    if (error || !data || data.ok !== true) {
+      openAuthModal('login');
+      const errorDiv = document.getElementById('login-error');
+      if (errorDiv) {
+        errorDiv.textContent = 'Google sign-in did not finish. Please try again.';
+        errorDiv.classList.remove('hidden');
+      }
+      return false;
+    }
+
+    startStudentSession(data.student, data.token);
+    return true;
+  } catch (e) {
+    console.warn('Google sign-in error:', e);
+    return false;
+  }
+}
+
 // Remember the logged-in student in this tab and show the dashboard.
 // Only harmless details are kept in the browser (never the password).
 function startStudentSession(student, token) {
@@ -418,7 +476,7 @@ function closePaymentModal() {
 function confirmPaymentRequest() {
   if (!activePaymentSubject) return;
   const priceNpr = Number(activePaymentSubject.price_npr || 0);
-  const text = `Hello Teacher, I want to enroll in "${activePaymentSubject.subject_name}" for NPR ${priceNpr}. My username/phone is: ${currentStudentUser?.phone_number || ''}. I have attached my payment voucher screenshot.`;
+  const text = `Hello Teacher, I want to enroll in "${activePaymentSubject.subject_name}" for NPR ${priceNpr}. My username/phone is: ${currentStudentUser?.phone_number || currentStudentUser?.username || ''}. I have attached my payment voucher screenshot.`;
   window.open(`https://wa.me/9779826109280?text=${encodeURIComponent(text)}`, '_blank');
   closePaymentModal();
 }
@@ -477,7 +535,8 @@ function scrollToSection(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
 }
 
-function checkSession() {
+async function checkSession() {
+  if (await finishGoogleLogin()) return;
   const savedUser = sessionStorage.getItem('student_user');
   if (savedUser) {
     currentStudentUser = JSON.parse(savedUser);

@@ -1707,3 +1707,42 @@ input, textarea {
   font-size: 0.82rem;
   color: var(--text-muted);
 }
+
+
+/* ==========================================
+   CONTINUE WITH GOOGLE BUTTON
+   ========================================== */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border-glass);
+}
+
+.btn-google {
+  width: 100%;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #ffffff;
+  color: #1f2937;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--transition);
+}
+.btn-google:hover { background: #f3f4f6; }
+.btn-google:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

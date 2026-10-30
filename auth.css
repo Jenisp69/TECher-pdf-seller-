@@ -1,0 +1,1095 @@
+/* ==========================================================
+   ThinkAhead sign-in / create-account modal
+
+   - Every rule is scoped to #auth-modal, so nothing else on the
+     site is affected. Theme follows <html data-theme="...">.
+   - Desktop / tablet: a compact centred card.
+   - Phones (max-width: 560px): a bottom sheet (see the end).
+   - Pip the cat has its own section further down.
+   ========================================================== */
+body.auth-modal-open {
+  overflow: hidden;
+  /* the page scrollbar disappears while the modal is open; this gives its width back so the page behind does not shift (--au-scrollbar is measured in auth-motion.js) */
+  padding-right: var(--au-scrollbar, 0px);
+}
+
+/* ---------- theme tokens ---------- */
+#auth-modal {
+  --au-card: #0f1830;
+  --au-card-glow: rgba(255, 255, 255, 0.04);
+  --au-ink: #f3f6fc;
+  --au-muted: #98a9c6;
+  --au-line: rgba(255, 255, 255, 0.1);
+  --au-line-strong: rgba(255, 255, 255, 0.28);
+  --au-field: rgba(255, 255, 255, 0.05);
+  --au-field-hover: rgba(255, 255, 255, 0.07);
+  --au-field-line: rgba(255, 255, 255, 0.14);
+  --au-field-line-hover: rgba(255, 255, 255, 0.26);
+  --au-seg: rgba(255, 255, 255, 0.07);
+  --au-seg-thumb: rgba(255, 255, 255, 0.15);
+  --au-seg-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --au-autofill: #1a2a48;
+  --au-accent: #7db3ff;
+  --au-btn: #3367dc;
+  --au-btn-hover: #3f74ec;
+  --au-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --au-ring: rgba(125, 179, 255, 0.28);
+  --au-err: #ffa8a8;
+  --au-err-bg: rgba(248, 113, 113, 0.12);
+  --au-err-line: rgba(248, 113, 113, 0.35);
+  --au-ok: #7fe0a8;
+  --au-ok-bg: rgba(74, 222, 155, 0.1);
+  --au-ok-line: rgba(74, 222, 155, 0.3);
+  --au-google-bg: rgba(255, 255, 255, 0.05);
+  --au-google-hover: rgba(255, 255, 255, 0.09);
+  --au-dim: rgba(4, 9, 20, 0.62);
+  --au-shadow: 0 0 0 0.5px rgba(255, 255, 255, 0.05), 0 32px 80px -8px rgba(0, 0, 0, 0.65);
+  --au-sheet-shadow: 0 -16px 48px rgba(0, 0, 0, 0.5);
+  --au-serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --au-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --au-ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+:root[data-theme="light"] #auth-modal {
+  --au-card: #fdfdfb;
+  --au-card-glow: rgba(255, 255, 255, 0);
+  --au-ink: #17243a;
+  --au-muted: #5b677b;
+  --au-line: #e4e7ed;
+  --au-line-strong: rgba(23, 36, 58, 0.22);
+  --au-field: #ffffff;
+  --au-field-hover: #ffffff;
+  --au-field-line: #d5dbe5;
+  --au-field-line-hover: #b6c1d2;
+  --au-seg: rgba(23, 36, 58, 0.06);
+  --au-seg-thumb: #ffffff;
+  --au-seg-thumb-shadow: 0 1px 3px rgba(23, 36, 58, 0.16), 0 0 0 0.5px rgba(23, 36, 58, 0.06);
+  --au-autofill: #ffffff;
+  --au-accent: #2c5a99;
+  --au-btn: #2c5a99;
+  --au-btn-hover: #234b82;
+  --au-btn-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 2px rgba(23, 36, 58, 0.22);
+  --au-ring: rgba(71, 118, 184, 0.22);
+  --au-err: #9b3029;
+  --au-err-bg: #fff0ee;
+  --au-err-line: #f2c4c0;
+  --au-ok: #23663c;
+  --au-ok-bg: #edf8f0;
+  --au-ok-line: #b8dec5;
+  --au-google-bg: #ffffff;
+  --au-google-hover: #f6f8fb;
+  --au-dim: rgba(15, 23, 42, 0.45);
+  --au-shadow: 0 0 0 0.5px rgba(23, 36, 58, 0.06), 0 28px 70px -10px rgba(15, 23, 42, 0.3);
+  --au-sheet-shadow: 0 -12px 40px rgba(15, 23, 42, 0.22);
+}
+
+/* ---------- backdrop + card ---------- */
+#auth-modal {
+  z-index: 1400;
+  align-items: center;
+  justify-content: center;
+  padding: max(14px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
+  background: var(--au-dim);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+#auth-modal .auth-card,
+#auth-modal .auth-card * {
+  box-sizing: border-box;
+}
+
+#auth-modal .auth-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 384px);
+  margin-top: 40px; /* room for the cat */
+  max-height: calc(var(--au-vh, 100dvh) - 68px); /* --au-vh follows the on-screen keyboard (set in auth.js) */
+  border: 1px solid var(--au-line);
+  border-radius: 20px;
+  background: linear-gradient(180deg, var(--au-card-glow), transparent 140px), var(--au-card);
+  color: var(--au-ink);
+  box-shadow: var(--au-shadow);
+  outline: none;
+}
+
+/* the card scrolls inside itself, so the cat above it is never clipped */
+#auth-modal .auth-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 24px 26px 22px;
+  border-radius: inherit;
+  overflow-anchor: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--au-line) transparent;
+}
+
+/* drag handle: only shown in the phone bottom sheet */
+#auth-modal .auth-grabber {
+  display: none;
+}
+
+#auth-modal .auth-close {
+  position: absolute;
+  z-index: 3;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--au-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+}
+
+#auth-modal .auth-close:hover {
+  background: var(--au-seg);
+  color: var(--au-ink);
+}
+
+#auth-modal .auth-close:active {
+  transform: scale(0.92);
+}
+
+#auth-modal .auth-close:focus-visible,
+#auth-modal .auth-password-toggle:focus-visible,
+#auth-modal .auth-submit:focus-visible,
+#auth-modal .auth-google:focus-visible,
+#auth-modal .auth-forgot:focus-visible,
+#auth-modal .auth-privacy:focus-visible {
+  outline: 2px solid var(--au-accent);
+  outline-offset: 3px;
+}
+
+/* ---------- brand (the switcher is the visible title; the heading is kept for screen readers only) ---------- */
+#auth-modal .auth-brand-row {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 10px;
+  padding-right: 44px;
+}
+
+#auth-modal .auth-brand-logo {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+#auth-modal .auth-wordmark {
+  color: var(--au-ink);
+  font-family: var(--au-serif);
+  font-size: 1.28rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+#auth-modal .auth-kicker {
+  margin: 10px 0 18px;
+  color: var(--au-accent);
+  font-size: 0.62rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+}
+
+#auth-modal .auth-heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Sign in / Create account switcher ---------- */
+#auth-modal .auth-tabs {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  margin: 0 0 18px;
+  padding: 3px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--au-seg);
+}
+
+/* the sliding pill behind the active option */
+#auth-modal .auth-tabs::before {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc((100% - 6px) / 2);
+  border-radius: 9px;
+  background: var(--au-seg-thumb);
+  box-shadow: var(--au-seg-thumb-shadow);
+  transition: transform 0.3s var(--au-ease-sheet);
+  content: "";
+}
+
+#auth-modal .auth-tabs[data-active="signup"]::before {
+  transform: translateX(100%);
+}
+
+#auth-modal .auth-tabs:has(#tab-signup.active)::before {
+  transform: translateX(100%);
+}
+
+#auth-modal .auth-tabs .tab-btn {
+  position: relative;
+  z-index: 1;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--au-muted);
+  font-family: inherit;
+  font-size: 0.84rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+#auth-modal .auth-tabs .tab-btn:hover {
+  color: var(--au-ink);
+}
+
+#auth-modal .auth-tabs .tab-btn.active {
+  background: transparent;
+  color: var(--au-ink);
+}
+
+#auth-modal .auth-tabs .tab-btn:focus-visible {
+  outline: 2px solid var(--au-accent);
+  outline-offset: -2px;
+}
+
+/* ---------- messages ---------- */
+#auth-modal .auth-message {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  text-align: left;
+}
+
+#auth-modal .auth-message-error {
+  border-color: var(--au-err-line);
+  background: var(--au-err-bg);
+  color: var(--au-err);
+}
+
+#auth-modal .auth-message-success {
+  border-color: var(--au-ok-line);
+  background: var(--au-ok-bg);
+  color: var(--au-ok);
+}
+
+/* ---------- the two forms sit in one box and slide past each other ----------
+   The form that is not active is still in the page (so it can animate), but it
+   is invisible, not clickable, and skipped by Tab. auth-motion.js also marks it
+   `inert`. The 4px padding / -4px margin stops focus rings being clipped while
+   the box animates its height. */
+#auth-modal .auth-panels {
+  position: relative;
+  margin: -4px;
+  padding: 4px;
+}
+
+/* The hidden form is taken out of the flow (position: absolute) so the two can overlap, but a taller hidden form
+   still stuck out below this box and made the whole card scrollable (a scrollbar on desktop, a 26px scroll on phones).
+   Clipping vertically stops that. Horizontally it stays visible so the slide-out is unchanged. */
+@supports (overflow: clip) {
+  #auth-modal .auth-panels {
+    overflow-x: visible;
+    overflow-y: clip;
+  }
+}
+
+#auth-modal .auth-panels > #login-form,
+#auth-modal .auth-panels > #signup-form-container {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition: opacity 0.22s ease 0.04s, transform 0.3s var(--au-ease), visibility 0s;
+}
+
+#auth-modal .auth-panels > #login-form.hidden,
+#auth-modal .auth-panels > #signup-form-container.hidden {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  left: 4px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.14s ease, transform 0.26s var(--au-ease), visibility 0s linear 0.26s;
+}
+
+/* site-wide .hidden is display:none !important, so this needs !important and a more specific selector */
+#auth-modal .auth-panels > #login-form.hidden {
+  display: grid !important;
+  transform: translateX(-20px);
+}
+
+#auth-modal .auth-panels > #signup-form-container.hidden {
+  display: block !important;
+  transform: translateX(20px);
+}
+
+/* ---------- fields ---------- */
+#auth-modal .auth-form {
+  display: grid;
+  gap: 14px;
+}
+
+#auth-modal .auth-field {
+  min-width: 0;
+  margin: 0;
+}
+
+#auth-modal .auth-field label {
+  display: block;
+  margin: 0 0 7px;
+  color: var(--au-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+#auth-modal .auth-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+#auth-modal .auth-label-row label {
+  margin: 0;
+}
+
+#auth-modal .auth-forgot {
+  color: var(--au-accent);
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+#auth-modal .auth-forgot:hover {
+  text-decoration: underline;
+}
+
+#auth-modal .auth-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+#auth-modal .auth-input-wrap .input-icon {
+  position: absolute;
+  z-index: 1;
+  left: 14px;
+  color: var(--au-muted);
+  font-size: 0.82rem;
+  pointer-events: none;
+  transition: color 0.18s ease;
+}
+
+#auth-modal .auth-input-wrap:focus-within .input-icon {
+  color: var(--au-accent);
+}
+
+#auth-modal .auth-input-wrap input {
+  width: 100%;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px 0 40px;
+  border: 1px solid var(--au-field-line);
+  border-radius: 12px;
+  background: var(--au-field);
+  color: var(--au-ink);
+  font-family: inherit;
+  font-size: 0.94rem;
+  line-height: 1.2;
+  user-select: text;
+  -webkit-user-select: text;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+#auth-modal .auth-input-wrap input.auth-password {
+  padding-right: 48px;
+}
+
+#auth-modal .auth-input-wrap input::placeholder {
+  color: var(--au-muted);
+  opacity: 0.7;
+}
+
+#auth-modal .auth-input-wrap input:hover:not(:focus) {
+  border-color: var(--au-field-line-hover);
+  background: var(--au-field-hover);
+}
+
+#auth-modal .auth-input-wrap input:focus {
+  outline: 0;
+  border-color: var(--au-accent);
+  box-shadow: 0 0 0 4px var(--au-ring);
+}
+
+/* shown only after the person has typed and left a field with a wrong value */
+#auth-modal .auth-input-wrap input:user-invalid {
+  border-color: var(--au-err);
+}
+
+#auth-modal .auth-input-wrap input:user-invalid:focus {
+  box-shadow: 0 0 0 4px var(--au-err-bg);
+}
+
+#auth-modal .auth-input-wrap input:-webkit-autofill {
+  -webkit-text-fill-color: var(--au-ink);
+  caret-color: var(--au-ink);
+  box-shadow: 0 0 0 100px var(--au-autofill) inset;
+  transition: background-color 9999s ease-out;
+}
+
+#auth-modal .auth-password-toggle {
+  position: absolute;
+  right: 4px;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--au-muted);
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.16s ease, color 0.16s ease;
+}
+
+#auth-modal .auth-password-toggle:hover {
+  background: var(--au-seg);
+  color: var(--au-ink);
+}
+
+/* ---------- buttons ---------- */
+#auth-modal .auth-submit {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--au-btn);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+  box-shadow: var(--au-btn-shadow);
+  transition: background 0.16s ease, transform 0.16s var(--au-ease), box-shadow 0.16s ease;
+}
+
+#auth-modal .auth-submit:hover {
+  background: var(--au-btn-hover);
+}
+
+#auth-modal .auth-submit:active {
+  transform: scale(0.985);
+}
+
+#auth-modal .auth-submit-arrow {
+  transition: transform 0.2s var(--au-ease);
+}
+
+#auth-modal .auth-submit:hover .auth-submit-arrow {
+  transform: translateX(3px);
+}
+
+#auth-modal .auth-submit[disabled],
+#auth-modal .auth-google[disabled] {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+#auth-modal .auth-submit[aria-busy="true"]::after {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+  content: "";
+}
+
+#auth-modal .auth-submit[aria-busy="true"] .auth-submit-arrow {
+  display: none;
+}
+
+#auth-modal .auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 14px;
+  color: var(--au-muted);
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+}
+
+#auth-modal .auth-divider::before,
+#auth-modal .auth-divider::after {
+  height: 1px;
+  flex: 1;
+  background: var(--au-line);
+  content: "";
+}
+
+#auth-modal .auth-google {
+  display: flex;
+  width: 100%;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid var(--au-field-line);
+  border-radius: 12px;
+  background: var(--au-google-bg);
+  color: var(--au-ink);
+  font-size: 0.86rem;
+  font-weight: 600;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s var(--au-ease);
+}
+
+#auth-modal .auth-google:hover {
+  border-color: var(--au-field-line-hover);
+  background: var(--au-google-hover);
+}
+
+#auth-modal .auth-google:active {
+  transform: scale(0.985);
+}
+
+#auth-modal .auth-google svg {
+  flex: none;
+}
+
+#auth-modal .auth-fineprint {
+  margin: 14px 0 0;
+  text-align: center;
+  font-size: 0.7rem;
+}
+
+#auth-modal .auth-privacy {
+  color: var(--au-muted);
+  text-decoration: none;
+}
+
+#auth-modal .auth-privacy:hover {
+  color: var(--au-ink);
+  text-decoration: underline;
+}
+
+/* ==========================================================
+   PIP, the cat. Sits on the card's top edge.
+   JS only sets --lx / --ly (-1..1, where it is looking).
+   Paws react to .auth-password-visible, a class that
+   updateAuthBuddy() sets from the real input type.
+   ========================================================== */
+#auth-modal .auth-cat {
+  --lx: 0;
+  --ly: 0;
+  --fur: #f2c48d;
+  --fur-shade: rgba(160, 95, 40, 0.2);
+  --ear-in: #f0a3a0;
+  --cat-ink: #1b2742;
+  position: absolute;
+  z-index: 2;
+  right: 34px;
+  bottom: 100%;
+  width: 64px;
+  height: 44px;
+  pointer-events: none;
+}
+
+#auth-modal .cat-face {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+  transform: translate(calc(var(--lx) * 1.5px), calc(var(--ly) * 0.8px)) rotate(calc(var(--lx) * 2.5deg));
+  transition: transform 0.14s ease-out;
+}
+
+#auth-modal .cat-ear {
+  position: absolute;
+  bottom: 26px;
+  width: 15px;
+  height: 15px;
+  background: var(--fur);
+  clip-path: polygon(0 100%, 50% 0, 100% 100%);
+  transform-origin: 50% 100%;
+}
+
+#auth-modal .cat-ear::after {
+  position: absolute;
+  right: 4px;
+  bottom: 0;
+  left: 4px;
+  height: 8px;
+  background: var(--ear-in);
+  clip-path: polygon(0 100%, 50% 0, 100% 100%);
+  content: "";
+}
+
+#auth-modal .cat-ear-l {
+  left: 13px;
+  transform: rotate(-14deg);
+}
+
+#auth-modal .cat-ear-r {
+  right: 13px;
+  transform: rotate(14deg);
+}
+
+#auth-modal .cat-head {
+  position: absolute;
+  left: 8px;
+  bottom: -2px;
+  width: 48px;
+  height: 32px;
+  border-radius: 20px 20px 18px 18px / 16px 16px 14px 14px;
+  background: var(--fur);
+  box-shadow: inset 0 -4px 0 var(--fur-shade);
+}
+
+/* whiskers */
+#auth-modal .cat-head::before,
+#auth-modal .cat-head::after {
+  position: absolute;
+  top: 20px;
+  width: 9px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: rgba(120, 70, 30, 0.5);
+  box-shadow: 0 4px 0 rgba(120, 70, 30, 0.5);
+  content: "";
+}
+
+#auth-modal .cat-head::before {
+  left: -6px;
+}
+
+#auth-modal .cat-head::after {
+  right: -6px;
+}
+
+#auth-modal .cat-eye {
+  position: absolute;
+  top: 11px;
+  width: 10px;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(27, 39, 66, 0.15);
+  animation: cat-blink 6.5s infinite;
+}
+
+#auth-modal .cat-eye-l {
+  left: 10px;
+}
+
+#auth-modal .cat-eye-r {
+  right: 10px;
+}
+
+#auth-modal .cat-pupil {
+  position: absolute;
+  inset: 0;
+  width: 5px;
+  height: 7px;
+  margin: auto;
+  border-radius: 50%;
+  background: var(--cat-ink);
+  transform: translate(calc(var(--lx) * 2.2px), calc(var(--ly) * 2.4px));
+  transition: transform 0.1s ease-out;
+}
+
+#auth-modal .cat-pupil::after {
+  position: absolute;
+  top: 1px;
+  right: 0.5px;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: #fff;
+  content: "";
+}
+
+#auth-modal .cat-nose {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  width: 6px;
+  height: 4px;
+  margin-left: -3px;
+  border-radius: 3px 3px 50% 50%;
+  background: #e58f8f;
+}
+
+/* paws grip the card edge; they overlap it by a few pixels */
+#auth-modal .cat-paw {
+  position: absolute;
+  bottom: -5px;
+  width: 14px;
+  height: 12px;
+  border-radius: 8px 8px 5px 5px;
+  background: var(--fur);
+  box-shadow: inset 0 -3px 0 var(--fur-shade), 0 0 0 1px rgba(160, 95, 40, 0.14);
+  transition: transform 0.22s var(--au-ease);
+}
+
+#auth-modal .cat-paw::after {
+  /* toe lines */
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 5px;
+  background: linear-gradient(
+    90deg,
+    transparent calc(33% - 0.5px),
+    rgba(150, 85, 35, 0.35) 0 calc(33% + 0.5px),
+    transparent 0 calc(66% - 0.5px),
+    rgba(150, 85, 35, 0.35) 0 calc(66% + 0.5px),
+    transparent 0
+  );
+  content: "";
+}
+
+#auth-modal .cat-paw-l {
+  left: 14px;
+}
+
+#auth-modal .cat-paw-r {
+  right: 14px;
+}
+
+/* password revealed: paws cover the eyes */
+#auth-modal.auth-password-visible .cat-paw-l {
+  transform: translate(2px, -12px);
+}
+
+#auth-modal.auth-password-visible .cat-paw-r {
+  transform: translate(-2px, -12px);
+}
+
+/* error: one small "nope" (uses the separate `translate` property so it never fights the head-follow transform) */
+#auth-modal .auth-cat.is-oops .cat-face {
+  animation: cat-nope 0.4s ease-in-out;
+}
+
+/* ---------- open animation (short on purpose) ----------
+   `backwards` (not `both`) so the animation never holds a transform
+   after it ends; the swipe-to-dismiss code needs to set its own. */
+#auth-modal:not(.hidden) {
+  animation: auth-backdrop-in 0.16s ease-out backwards;
+}
+
+#auth-modal:not(.hidden) .auth-card {
+  animation: auth-card-in 0.22s var(--au-ease) backwards;
+}
+
+@keyframes auth-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* phones: only the dimming fades in, so the sheet itself is solid the whole time it rises */
+@keyframes auth-dim-in {
+  from {
+    background-color: transparent;
+  }
+}
+
+@keyframes auth-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Rises, drifts about 10px past its resting place, then settles back. Each part has its own easing so the
+   turnaround and the settle are smooth. ::after on the card keeps the area under the sheet solid meanwhile. */
+@keyframes auth-sheet-in {
+  0% {
+    transform: translateY(100%);
+    animation-timing-function: cubic-bezier(0.25, 0.8, 0.3, 1);
+  }
+  68% {
+    transform: translateY(-10px);
+    animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes auth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes cat-blink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes cat-nope {
+  0%,
+  100% {
+    translate: 0 0;
+  }
+  20% {
+    translate: -3px 0;
+  }
+  40% {
+    translate: 3px 0;
+  }
+  60% {
+    translate: -2px 0;
+  }
+  80% {
+    translate: 2px 0;
+  }
+}
+
+/* ==========================================================
+   SHORT SCREENS (any width): tighter spacing so Create account
+   still fits without scrolling on small laptop windows.
+   ========================================================== */
+@media (max-height: 720px) {
+  #auth-modal .auth-body {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  #auth-modal .auth-kicker {
+    margin: 8px 0 12px;
+  }
+  #auth-modal .auth-tabs {
+    margin-bottom: 14px;
+  }
+  #auth-modal .auth-form {
+    gap: 10px;
+  }
+  #auth-modal .auth-field label,
+  #auth-modal .auth-label-row {
+    margin-bottom: 5px;
+  }
+  #auth-modal .auth-divider {
+    margin: 10px 0 8px;
+  }
+  #auth-modal .auth-fineprint {
+    margin-top: 8px;
+  }
+}
+
+@media (max-height: 720px) and (min-width: 561px) {
+  #auth-modal .auth-input-wrap input {
+    height: 42px;
+  }
+  #auth-modal .auth-submit,
+  #auth-modal .auth-google {
+    min-height: 42px;
+  }
+}
+
+@media (max-height: 620px) and (min-width: 561px) {
+  #auth-modal .auth-body {
+    scrollbar-gutter: stable both-edges;
+  }
+}
+
+/* landscape phones / very short windows: no room for the cat */
+@media (max-height: 560px) {
+  #auth-modal .auth-cat {
+    display: none;
+  }
+  #auth-modal .auth-card {
+    margin-top: 0;
+    max-height: calc(var(--au-vh, 100dvh) - 28px);
+  }
+}
+
+/* ==========================================================
+   PHONES: bottom sheet.
+   The card attaches to the bottom edge, slides up when opened, and
+   keeps its own scrolling. --au-kb (set in auth-motion.js) lifts the
+   sheet above the on-screen keyboard; --au-vh (set in auth.js) is the
+   visible height, so the sheet never grows taller than what is visible.
+   ========================================================== */
+@media (max-width: 560px) {
+  #auth-modal {
+    align-items: flex-end;
+    padding: 0 0 var(--au-kb, 0px);
+    overflow: hidden;
+    overflow: clip; /* clip, not hidden: the skirt below must never become scrollable area the browser can scroll to */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  #auth-modal .auth-card {
+    width: 100%;
+    margin-top: 0;
+    max-height: min(680px, calc(var(--au-vh, 100dvh) - env(safe-area-inset-top, 0px) - 60px));
+    border-width: 1px 0 0;
+    border-radius: 28px 28px 0 0;
+    box-shadow: var(--au-sheet-shadow);
+  }
+
+  #auth-modal:not(.hidden) {
+    animation: auth-dim-in 0.24s ease-out backwards;
+  }
+
+  #auth-modal:not(.hidden) .auth-card {
+    animation: auth-sheet-in 0.56s backwards;
+  }
+
+  /* solid skirt: if the sheet is ever lifted (the settle above, the keyboard) the strip it uncovers is
+     the sheet's own colour instead of the website behind it */
+  #auth-modal .auth-card::after {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    height: 160px;
+    background: var(--au-card);
+    content: "";
+    pointer-events: none;
+  }
+
+  #auth-modal .auth-grabber {
+    position: absolute;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: grid;
+    height: 26px;
+    place-items: center;
+    touch-action: none;
+  }
+
+  #auth-modal .auth-grabber span {
+    width: 38px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--au-line-strong);
+  }
+
+  #auth-modal .auth-body {
+    padding: 26px 20px max(20px, env(safe-area-inset-bottom));
+  }
+
+  #auth-modal .auth-close {
+    top: 10px;
+    right: 10px;
+    width: 40px;
+    height: 40px;
+  }
+
+  /* the logo row doubles as a second place to grab the sheet and swipe it down */
+  #auth-modal .auth-brand-row {
+    touch-action: none;
+  }
+
+  #auth-modal .auth-kicker {
+    margin: 8px 0 14px;
+  }
+
+  #auth-modal .auth-tabs {
+    margin-bottom: 14px;
+  }
+
+  #auth-modal .auth-form {
+    gap: 12px;
+  }
+
+  #auth-modal .auth-input-wrap input {
+    height: 46px;
+    font-size: 16px; /* 16px stops iOS zooming in when a field is focused */
+  }
+
+  #auth-modal .auth-submit,
+  #auth-modal .auth-google {
+    min-height: 48px;
+  }
+
+  /* the main button stays reachable while the fields scroll underneath it */
+  #auth-modal .auth-form > .auth-submit {
+    position: sticky;
+    z-index: 1;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    box-shadow: 0 0 0 8px var(--au-card), var(--au-btn-shadow);
+  }
+
+  #auth-modal .auth-divider {
+    margin: 16px 0 12px;
+  }
+
+  #auth-modal .auth-fineprint {
+    margin-top: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #auth-modal,
+  #auth-modal *,
+  #auth-modal *::before,
+  #auth-modal *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

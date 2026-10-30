@@ -1,13 +1,9 @@
 
 
-const DEFAULT_CLASSES = [
-  { id: '11', name: 'Class 11' },
-  { id: '12', name: 'Class 12' },
-  { id: 'bachelor', name: 'Bachelor Level' }
-];
-
-// Load persisted classes or fall back to default list
-let globalClasses = JSON.parse(localStorage.getItem('admin_global_classes')) || DEFAULT_CLASSES;
+// The level list lives in the database (table public.levels). There are no built-in levels:
+// a level appears only if the teacher created it, on every browser and device.
+let globalClasses = [];
+let levelsTableReady = true;   // false only if levels-migration.sql has not been run yet
 let globalSubjects = [];
 let globalStreams = [];
 let selectedSubjectsCart = [];
@@ -18,15 +14,131 @@ if (typeof pdfjsLib !== 'undefined') {
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 }
 
-function saveClassesToStorage() {
-  localStorage.setItem('admin_global_classes', JSON.stringify(globalClasses));
+/* ==========================================
+   LEVELS (saved in Supabase: public.levels)
+   id   = the short code already stored in streams.class_level and subjects.class_level
+   name = what the teacher sees; renaming changes the name only, never the id
+   ========================================== */
+const LEGACY_LEVELS_KEY = 'admin_global_classes';        // the old browser-only list (read once, never deleted)
+const LEGACY_IMPORT_DONE_KEY = 'admin_levels_import_done';
+const LEVELS_TABLE_MISSING_MESSAGE =
+  'The levels table has not been created in Supabase yet.\n\n' +
+  'Run levels-migration.sql in the Supabase SQL Editor, then reload this page.\n\n' +
+  'Until then, levels are shown from your existing streams and subjects, and adding, renaming or deleting levels is switched off.';
+
+function prettyLevelName(id) {
+  if (id === 'bachelor') return 'Bachelor Level';
+  return String(id).replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+}
+
+function nextLevelOrder() {
+  return globalClasses.reduce((max, l) => Math.max(max, Number(l.display_order) || 0), 0) + 1;
+}
+
+function sortLevels() {
+  globalClasses.sort((a, b) =>
+    (Number(a.display_order) || 0) - (Number(b.display_order) || 0) ||
+    String(a.name).localeCompare(String(b.name)));
+}
+
+// Load the level list from the database. Never uses built-in defaults or browser storage.
+// Needs globalStreams and globalSubjects to be loaded first.
+async function fetchLevels() {
+  const { data, error } = await supabaseClient
+    .from('levels')
+    .select('id, name, display_order, created_at')
+    .order('display_order', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    levelsTableReady = false;
+    globalClasses = [];
+    console.error('Could not load levels:', error);
+    alert(LEVELS_TABLE_MISSING_MESSAGE);
+  } else {
+    levelsTableReady = true;
+    globalClasses = data || [];
+  }
+
+  // Safety net: a level that streams or subjects already use must always be reachable,
+  // even if nobody created it in the levels table.
+  const known = new Set(globalClasses.map(l => l.id));
+  const used = new Set();
+  globalStreams.forEach(s => { if (s.class_level) used.add(s.class_level); });
+  globalSubjects.forEach(s => { if (s.class_level) used.add(s.class_level); });
+
+  const missing = [...used].filter(id => !known.has(id));
+  if (missing.length) {
+    const start = nextLevelOrder();
+    const rows = missing.map((id, i) => ({ id, name: prettyLevelName(id), display_order: start + i }));
+    if (levelsTableReady) {
+      const { error: saveError } = await supabaseClient
+        .from('levels')
+        .upsert(rows, { onConflict: 'id', ignoreDuplicates: true });
+      if (saveError) console.warn('Could not register existing levels:', saveError);
+    }
+    rows.forEach(r => globalClasses.push(r));
+  }
+  sortLevels();
+}
+
+// ONE-TIME rescue: levels (and names) that exist only in this browser's old list.
+// It asks before saving anything, and never deletes the old list.
+async function importLevelsFromThisBrowser() {
+  if (!levelsTableReady) return;
+  if (localStorage.getItem(LEGACY_IMPORT_DONE_KEY)) return;
+
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem(LEGACY_LEVELS_KEY) || 'null'); } catch (e) { local = null; }
+  if (!Array.isArray(local) || !local.length) return;
+
+  const items = local.filter(l => l && typeof l.id === 'string' && l.id && typeof l.name === 'string' && l.name.trim());
+  const byId = new Map(globalClasses.map(l => [l.id, l]));
+  let changed = false;
+
+  for (const item of items) {
+    const name = item.name.trim().slice(0, 80);
+    const saved = byId.get(item.id);
+
+    if (!saved) {
+      const inUse = globalStreams.some(s => s.class_level === item.id);
+      const ok = confirm(
+        'This browser has a level that is not saved online yet:\n\n' +
+        '"' + name + '"' + (inUse ? '' : '  (it has no streams yet)') + '\n\n' +
+        'Save it to the database so it appears on every device?');
+      if (!ok) continue;
+      const row = { id: item.id, name, display_order: nextLevelOrder() };
+      const { error } = await supabaseClient.from('levels').insert([row]);
+      if (error) { alert('Could not save "' + name + '": ' + error.message); continue; }
+      globalClasses.push(row);
+      byId.set(row.id, row);
+      changed = true;
+    } else if (saved.name !== name) {
+      const ok = confirm(
+        'The saved name of this level is "' + saved.name + '", but this browser has it as "' + name + '".\n\n' +
+        'Use "' + name + '" everywhere?');
+      if (!ok) continue;
+      const { error } = await supabaseClient.from('levels').update({ name }).eq('id', saved.id);
+      if (error) { alert('Could not rename: ' + error.message); continue; }
+      saved.name = name;
+      changed = true;
+    }
+  }
+
+  localStorage.setItem(LEGACY_IMPORT_DONE_KEY, new Date().toISOString());   // do not ask again; the old list stays as a backup
+  if (changed) {
+    sortLevels();
+    populateClassDropdowns();
+  }
 }
 
 async function initAdmin() {
   await fetchStreamsAndSubjects();
+  await fetchLevels();
   await fetchStudents();
   populateClassDropdowns();
   await fetchAndRenderFeedback();
+  await importLevelsFromThisBrowser();
 }
 
 function populateClassDropdowns() {
@@ -66,30 +178,22 @@ function arrayBufferToBase64(buffer) {
    ========================================== */
 
 async function fetchStreamsAndSubjects() {
-  const { data: streams } = await supabaseClient.from('streams').select('*');
-  
-  // Dual-query strategy: Fetch from hierarchy_nodes and fall back / merge subjects
-  const { data: hierarchyNodes } = await supabaseClient
-    .from('hierarchy_nodes')
-    .select('*')
-    .eq('node_type', 'subject');
+  const { data: streams, error: streamsError } = await supabaseClient.from('streams').select('*');
+  const { data: subjects, error: subjectsError } = await supabaseClient.from('subjects').select('*');
 
-  const { data: subjects } = await supabaseClient.from('subjects').select('*');
+  if (streamsError || subjectsError) {
+    console.error('Could not load streams/subjects:', streamsError || subjectsError);
+    alert('Could not load streams or subjects: ' + (streamsError || subjectsError).message);
+  }
 
   globalStreams = streams || [];
 
-  if (hierarchyNodes && hierarchyNodes.length > 0) {
-    globalSubjects = hierarchyNodes.map(node => {
-      const subMatch = (subjects || []).find(s => s.id === node.id);
-      return {
-        ...subMatch,
-        ...node,
-        subject_name: node.node_name || node.subject_name || (subMatch ? subMatch.subject_name : '')
-      };
-    });
-  } else {
-    globalSubjects = subjects || [];
-  }
+  // The subjects table is the source of truth: it is what students read. This list used to be built from
+  // hierarchy_nodes, which silently dropped every subject that has no matching node (so they could not be
+  // opened, uploaded to, or assigned from this dashboard).
+  globalSubjects = (subjects || [])
+    .map(sub => ({ ...sub, subject_name: sub.subject_name || '' }))
+    .sort((a, b) => String(a.subject_name).localeCompare(String(b.subject_name), undefined, { numeric: true }));
 }
 
 function handleClassChange(prefix) {
@@ -155,19 +259,28 @@ function handleStreamChange(prefix) {
 }
 
 /* Persistent Dynamic Class Handlers */
-function promptAddNewClass() {
+async function promptAddNewClass() {
+  if (!levelsTableReady) return alert(LEVELS_TABLE_MISSING_MESSAGE);
+
   const name = prompt("Enter New Level / Class Name (e.g. Master Level, Diploma):");
   if (!name || !name.trim()) return;
 
   const cleanName = name.trim();
   const val = cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_');
 
+  if (/^_*$/.test(val)) {
+    return alert('Please use at least one English letter or number in the level name.');
+  }
   if (globalClasses.some(c => c.id === val)) {
     return alert('Level already exists.');
   }
 
-  globalClasses.push({ id: val, name: cleanName });
-  saveClassesToStorage();
+  const row = { id: val, name: cleanName, display_order: nextLevelOrder() };
+  const { error } = await supabaseClient.from('levels').insert([row]);
+  if (error) return alert(`Could not save the level: ${error.message}`);
+
+  globalClasses.push(row);
+  sortLevels();
   populateClassDropdowns();
 
   document.getElementById('mgr-class').value = val;
@@ -175,52 +288,66 @@ function promptAddNewClass() {
 }
 
 async function renameSelectedClass() {
+  if (!levelsTableReady) return alert(LEVELS_TABLE_MISSING_MESSAGE);
+
   const classVal = document.getElementById('mgr-class').value;
   if (!classVal) return alert('Please select a Class / Level to rename.');
 
   const clsObj = globalClasses.find(c => c.id === classVal);
   const newName = prompt('Enter new Level / Class Name:', clsObj ? clsObj.name : '');
+  if (!newName || !newName.trim() || !clsObj) return;
 
-  if (newName && newName.trim()) {
-    clsObj.name = newName.trim();
-    saveClassesToStorage();
-    
-    await supabaseClient
-      .from('streams')
-      .update({ class_level: classVal })
-      .eq('class_level', classVal);
+  // Only the display name changes. The id is what streams and subjects point to, so it must never change.
+  const { data, error } = await supabaseClient
+    .from('levels')
+    .update({ name: newName.trim() })
+    .eq('id', classVal)
+    .select();
 
-    populateClassDropdowns();
-    document.getElementById('mgr-class').value = classVal;
-    alert('✅ Level updated!');
-  }
+  if (error) return alert(`Could not rename the level: ${error.message}`);
+  if (!data || data.length === 0) return alert('The rename was not saved. Please sign in again and retry.');
+
+  clsObj.name = newName.trim();
+  populateClassDropdowns();
+  document.getElementById('mgr-class').value = classVal;
+  alert('✅ Level updated!');
 }
 
 async function deleteSelectedClass() {
+  if (!levelsTableReady) return alert(LEVELS_TABLE_MISSING_MESSAGE);
+
   const classVal = document.getElementById('mgr-class').value;
   if (!classVal) return alert('Please select a Class / Level to delete.');
 
-  if (!confirm('🚨 Are you sure? Removing this Level will delete associated streams and subjects.')) return;
+  const clsObj = globalClasses.find(c => c.id === classVal);
+  const levelName = clsObj ? clsObj.name : classVal;
 
   try {
-    const { data: streams } = await supabaseClient
-      .from('streams')
-      .select('id')
-      .eq('class_level', classVal);
-      
-    if (streams && streams.length > 0) {
-      const streamIds = streams.map(s => s.id);
-      await supabaseClient.from('hierarchy_nodes').delete().in('id', streamIds);
-      await supabaseClient.from('subjects').delete().in('stream_id', streamIds);
-      await supabaseClient.from('streams').delete().eq('class_level', classVal);
+    // Ask the database what this level still holds (not the screen, which could be out of date).
+    const [streamCount, subjectCount] = await Promise.all([
+      supabaseClient.from('streams').select('id', { count: 'exact', head: true }).eq('class_level', classVal),
+      supabaseClient.from('subjects').select('id', { count: 'exact', head: true }).eq('class_level', classVal)
+    ]);
+    if (streamCount.error || subjectCount.error) throw (streamCount.error || subjectCount.error);
+
+    if ((streamCount.count || 0) > 0 || (subjectCount.count || 0) > 0) {
+      return alert(
+        `"${levelName}" still contains ${streamCount.count || 0} stream(s) and ${subjectCount.count || 0} subject(s).\n\n` +
+        'A level with content cannot be deleted here, because that would also delete the books, ' +
+        'the students\' access and their notes.\n\n' +
+        'Remove or move the content first, then delete the empty level.');
     }
 
+    if (!confirm(`Delete the empty level "${levelName}"?`)) return;
+
+    const { data, error } = await supabaseClient.from('levels').delete().eq('id', classVal).select();
+    if (error) throw error;
+    if (!data || data.length === 0) throw new Error('Nothing was deleted. Please sign in again and retry.');
+
     globalClasses = globalClasses.filter(c => c.id !== classVal);
-    saveClassesToStorage();
     populateClassDropdowns();
     handleClassChange('mgr');
-    await fetchStreamsAndSubjects();
-    alert('✅ Level and associated data removed.');
+    alert('✅ Empty level removed.');
   } catch (err) {
     alert(`Error deleting level: ${err.message}`);
   }

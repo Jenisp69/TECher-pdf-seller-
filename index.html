@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>ThinkAhead Student Portal</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="profile.css">
+  <link rel="stylesheet" href="auth.css">
 
 
   <script>
@@ -52,11 +54,12 @@
           <span>Login / Register</span>
         </button>
 
-        <!-- Logged-In State -->
-        <div id="nav-user-profile" class="hidden user-profile-pill glass-card">
-          <span id="nav-user-name">Student</span>
-          <button id="dash-logout-btn" class="btn-icon-danger" title="Logout">
-            <i class="fa-solid fa-power-off"></i>
+        <!-- Logged-In State: profile button (opens the profile drawer; the logout button lives inside it) -->
+        <div id="nav-user-profile" class="hidden">
+          <button id="profile-trigger" class="pf-trigger" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="pf-drawer" title="Your profile">
+            <span class="pf-avatar pf-avatar-sm" id="nav-avatar" aria-hidden="true"><img alt="" hidden><span class="pf-initials">S</span></span>
+            <span id="nav-user-name" class="pf-trigger-name">Student</span>
+            <i class="fa-solid fa-chevron-down pf-caret" aria-hidden="true"></i>
           </button>
         </div>
       </div>
@@ -242,101 +245,296 @@
   <!-- ==========================================
        03. Modals & Overlays
        ========================================== -->
-  <!-- Authentication Modal -->
-  <div id="auth-modal" class="modal-backdrop hidden">
-    <div class="glass-modal">
-      <button class="modal-close-btn" onclick="closeAuthModal()">&times;</button>
-      
-      <div class="brand-header">
-        <img src="resources/thinkaheadlogo.jpeg" alt="ThinkAhead Logo" class="app-logo" onerror="this.style.display='none'">
-        <h2 class="app-title">ThinkAhead Portal</h2>
-        <p class="app-subtitle">Sign in to view locked study notes & free book material</p>
-      </div>
+  <!-- ==========================================
+       Profile drawer (opened from the navbar profile button; behaviour in profile.js)
+       ========================================== -->
+  <div id="pf-overlay" class="pf-overlay" hidden></div>
+  <aside id="pf-drawer" class="pf-drawer" role="dialog" aria-modal="true" aria-labelledby="pf-title" aria-hidden="true" tabindex="-1" hidden>
+    <div class="pf-scroll">
 
-      <div class="auth-tabs">
-        <button type="button" class="tab-btn active" id="tab-login" onclick="switchAuthTab('login')">Sign In</button>
-        <button type="button" class="tab-btn" id="tab-signup" onclick="switchAuthTab('signup')">Sign Up</button>
-      </div>
+      <header class="pf-hero">
+        <div class="pf-hero-art" aria-hidden="true"></div>
+        <button type="button" class="pf-close" id="pf-close" aria-label="Close profile"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
 
-      <div id="login-error" class="hidden alert-box error"></div>
-      <div id="login-success" class="hidden alert-box success"></div>
-
-      <!-- Login Form -->
-      <form id="login-form">
-        <div class="form-group">
-          <label for="username-input">Username / Phone</label>
-          <div class="input-wrapper">
-            <i class="fa-solid fa-user input-icon"></i>
-            <input type="text" id="username-input" placeholder="Enter username or phone" required autocomplete="off">
-          </div>
-        </div>
-        
-        <div class="form-group">
-          <label for="password-input">Password</label>
-          <div class="input-wrapper">
-            <i class="fa-solid fa-lock input-icon"></i>
-            <input type="password" id="password-input" placeholder="Enter password" required>
-            <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('password-input', this)"></i>
-          </div>
-        </div>
-        
-        <button type="submit" class="btn-primary-glass">
-          <span>Sign In</span>
-          <i class="fa-solid fa-arrow-right"></i>
-        </button>
-      </form>
-
-      <!-- Signup Form -->
-      <div id="signup-form-container" class="hidden">
-        <form id="phone-otp-form">
-          <div class="form-group">
-            <label for="signup-name">Full Name</label>
-            <input type="text" id="signup-name" placeholder="Full Name" required>
-          </div>
-
-          <div class="form-group">
-            <label for="signup-phone">Phone Number</label>
-            <div class="input-wrapper">
-              <input type="tel" id="signup-phone" placeholder="98XXXXXXXX" required>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="signup-password">Create Password</label>
-            <div class="input-wrapper">
-              <input type="password" id="signup-password" placeholder="Minimum 6 characters" required>
-              <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('signup-password', this)"></i>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="signup-confirm-password">Confirm Password</label>
-            <div class="input-wrapper">
-              <input type="password" id="signup-confirm-password" placeholder="Re-enter password" required oncopy="return false;" onpaste="return false;" oncut="return false;" oncontextmenu="return false;">
-              <i class="fa-solid fa-eye password-toggle-icon" onclick="togglePasswordVisibility('signup-confirm-password', this)"></i>
-            </div>
-          </div>
-
-          <button type="submit" id="complete-signup-btn" class="btn-primary-glass">
-            <span>Create Account</span>
+        <div class="pf-avatar-wrap" id="pf-avatar-wrap">
+          <button type="button" class="pf-avatar pf-avatar-lg" id="pf-avatar-btn" aria-label="Change profile photo">
+            <img id="pf-avatar-img" alt="Your profile photo" hidden>
+            <span id="pf-avatar-initials" class="pf-initials">S</span>
+            <span class="pf-avatar-cam" aria-hidden="true"><i class="fa-solid fa-camera"></i></span>
           </button>
-        </form>
+        </div>
+        <input type="file" id="pf-file" accept="image/jpeg,image/png,image/webp" hidden>
+
+        <h2 id="pf-title" class="pf-name">Student</h2>
+        <p id="pf-handle" class="pf-handle"></p>
+        <span id="pf-method-chip" class="pf-chip"><i class="fa-solid fa-key" aria-hidden="true"></i><span>Signed in</span></span>
+
+        <div class="pf-photo-actions" id="pf-photo-actions">
+          <button type="button" class="pf-btn pf-btn-ghost pf-btn-sm" id="pf-photo-upload"><i class="fa-solid fa-image" aria-hidden="true"></i> Upload photo</button>
+          <button type="button" class="pf-btn pf-btn-ghost pf-btn-sm" id="pf-photo-remove" hidden><i class="fa-regular fa-trash-can" aria-hidden="true"></i> <span>Remove</span></button>
+          <button type="button" class="pf-btn pf-btn-primary pf-btn-sm" id="pf-photo-use" hidden>Use this photo</button>
+          <button type="button" class="pf-btn pf-btn-ghost pf-btn-sm" id="pf-photo-cancel" hidden>Cancel</button>
+        </div>
+      </header>
+
+      <div class="pf-tabs" role="tablist" aria-label="Profile sections">
+        <span class="pf-tab-indicator" id="pf-tab-indicator" aria-hidden="true"></span>
+        <button type="button" role="tab" class="pf-tab" id="pf-tab-profile" data-tab="profile" aria-selected="true" aria-controls="pf-panel-profile">Profile</button>
+        <button type="button" role="tab" class="pf-tab" id="pf-tab-contact" data-tab="contact" aria-selected="false" aria-controls="pf-panel-contact" tabindex="-1">Contact</button>
+        <button type="button" role="tab" class="pf-tab" id="pf-tab-security" data-tab="security" aria-selected="false" aria-controls="pf-panel-security" tabindex="-1">Security</button>
       </div>
 
-      <!-- Google sign-in (shown under both Sign In and Sign Up) -->
-      <div class="auth-divider"><span>or</span></div>
-      <button type="button" id="google-btn" class="btn-google" onclick="signInWithGoogle()">
-        <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
-          <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/>
-          <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/>
-          <path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/>
-          <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/>
-        </svg>
-        <span>Continue with Google</span>
-      </button>
-    </div>
-  </div>
+      <div class="pf-panels">
+        <div class="pf-banner" id="pf-banner" role="alert" hidden>
+          <span>Couldn't load your saved details. Check your internet connection.</span>
+          <button type="button" class="pf-btn pf-btn-ghost pf-btn-sm" id="pf-retry">Retry</button>
+        </div>
 
+        <!-- PROFILE -->
+        <section class="pf-panel" id="pf-panel-profile" role="tabpanel" aria-labelledby="pf-tab-profile">
+          <h3 class="pf-section-title">About you</h3>
+          <p class="pf-section-note">Your name is shown on your dashboard and to your teacher.</p>
+          <form id="pf-profile-form" novalidate>
+            <div class="pf-field">
+              <label class="pf-label" for="pf-name-input">Full name</label>
+              <div class="pf-input-wrap"><i class="fa-regular fa-user" aria-hidden="true"></i>
+                <input class="pf-input" type="text" id="pf-name-input" maxlength="80" autocomplete="name" aria-describedby="pf-name-error"></div>
+              <p class="pf-error" id="pf-name-error" aria-live="polite"></p>
+            </div>
+            <div class="pf-field">
+              <label class="pf-label" for="pf-username">Username <span class="pf-tag">Can't be changed</span></label>
+              <div class="pf-input-wrap"><i class="fa-solid fa-lock" aria-hidden="true"></i>
+                <input class="pf-input" type="text" id="pf-username" readonly></div>
+            </div>
+            <div class="pf-actions">
+              <button type="button" class="pf-btn pf-btn-ghost" id="pf-name-cancel">Cancel</button>
+              <button type="submit" class="pf-btn pf-btn-primary" id="pf-name-save" disabled>Save changes</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- CONTACT -->
+        <section class="pf-panel" id="pf-panel-contact" role="tabpanel" aria-labelledby="pf-tab-contact" hidden>
+          <h3 class="pf-section-title">How to reach you</h3>
+          <p class="pf-section-note">Contact details are for your teacher to reach you. They are not used to sign in, and they are not verified yet.</p>
+
+          <form id="pf-phone-form" novalidate>
+            <div class="pf-field">
+              <label class="pf-label" for="pf-phone-input">Contact phone <span class="pf-tag">Not verified</span></label>
+              <div class="pf-input-wrap"><i class="fa-solid fa-phone" aria-hidden="true"></i>
+                <input class="pf-input" type="tel" inputmode="tel" id="pf-phone-input" maxlength="22" placeholder="98XXXXXXXX" autocomplete="tel" aria-describedby="pf-phone-error"></div>
+              <p class="pf-error" id="pf-phone-error" aria-live="polite"></p>
+            </div>
+            <div class="pf-actions">
+              <button type="button" class="pf-btn pf-btn-ghost" id="pf-phone-cancel">Cancel</button>
+              <button type="submit" class="pf-btn pf-btn-primary" id="pf-phone-save" disabled>Save phone</button>
+            </div>
+          </form>
+
+          <h3 class="pf-section-title" style="margin-top:26px;">Other email addresses</h3>
+          <p class="pf-section-note">Add up to 5 emails where you can be reached.</p>
+          <ul class="pf-email-list" id="pf-email-list" aria-label="Your contact emails"></ul>
+          <div class="pf-empty" id="pf-email-empty">No extra emails yet.</div>
+          <form id="pf-email-form" novalidate>
+            <div class="pf-add-row">
+              <div class="pf-input-wrap"><i class="fa-regular fa-envelope" aria-hidden="true"></i>
+                <input class="pf-input" type="email" id="pf-email-input" placeholder="name@example.com" maxlength="254" autocomplete="off" aria-label="New contact email" aria-describedby="pf-email-error"></div>
+              <button type="submit" class="pf-btn pf-btn-primary" id="pf-email-add">Add</button>
+            </div>
+            <p class="pf-error" id="pf-email-error" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <!-- SECURITY -->
+        <section class="pf-panel" id="pf-panel-security" role="tabpanel" aria-labelledby="pf-tab-security" hidden>
+          <h3 class="pf-section-title">How you sign in</h3>
+          <p class="pf-section-note">These details identify your account. They can't be edited here.</p>
+          <div class="pf-card">
+            <div class="pf-method">
+              <span class="pf-method-icon"><i id="pf-method-icon" class="fa-solid fa-key" aria-hidden="true"></i></span>
+              <div><b id="pf-method-title">Password</b><span id="pf-method-sub"></span></div>
+            </div>
+          </div>
+          <div class="pf-field" id="pf-sec-email-field" hidden>
+            <label class="pf-label" for="pf-sec-email">Primary sign-in email <span class="pf-tag">Can't be changed</span></label>
+            <div class="pf-input-wrap"><i class="fa-solid fa-lock" aria-hidden="true"></i><input class="pf-input" type="text" id="pf-sec-email" readonly></div>
+          </div>
+          <div class="pf-field" id="pf-sec-phone-field" hidden>
+            <label class="pf-label" for="pf-sec-phone">Registered phone <span class="pf-tag">Can't be changed</span></label>
+            <div class="pf-input-wrap"><i class="fa-solid fa-lock" aria-hidden="true"></i><input class="pf-input" type="text" id="pf-sec-phone" readonly></div>
+            <p class="pf-hint">This is the number you signed up with. To change it, ask your teacher.</p>
+          </div>
+
+          <div id="pf-password-section" hidden>
+            <h3 class="pf-section-title" style="margin-top:24px;">Change password</h3>
+            <p class="pf-section-note">You'll stay signed in here. Any other device will be signed out.</p>
+            <form id="pf-password-form" novalidate>
+              <div class="pf-field">
+                <label class="pf-label" for="pf-pw-current">Current password</label>
+                <div class="pf-input-wrap"><i class="fa-solid fa-lock" aria-hidden="true"></i>
+                  <input class="pf-input" type="password" id="pf-pw-current" autocomplete="current-password" aria-describedby="pf-pw-current-error">
+                  <button type="button" class="pf-eye" data-target="pf-pw-current" aria-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+                <p class="pf-error" id="pf-pw-current-error" aria-live="polite"></p>
+              </div>
+              <div class="pf-field">
+                <label class="pf-label" for="pf-pw-new">New password</label>
+                <div class="pf-input-wrap"><i class="fa-solid fa-key" aria-hidden="true"></i>
+                  <input class="pf-input" type="password" id="pf-pw-new" autocomplete="new-password" minlength="6" aria-describedby="pf-pw-new-error">
+                  <button type="button" class="pf-eye" data-target="pf-pw-new" aria-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+                <div class="pf-meter" id="pf-meter" data-level="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+                <p class="pf-error" id="pf-pw-new-error" aria-live="polite"></p>
+              </div>
+              <div class="pf-field">
+                <label class="pf-label" for="pf-pw-confirm">Confirm new password</label>
+                <div class="pf-input-wrap"><i class="fa-solid fa-key" aria-hidden="true"></i>
+                  <input class="pf-input" type="password" id="pf-pw-confirm" autocomplete="new-password" aria-describedby="pf-pw-confirm-error">
+                  <button type="button" class="pf-eye" data-target="pf-pw-confirm" aria-label="Show password"><i class="fa-solid fa-eye" aria-hidden="true"></i></button></div>
+                <p class="pf-error" id="pf-pw-confirm-error" aria-live="polite"></p>
+              </div>
+              <button type="submit" class="pf-btn pf-btn-primary pf-btn-block" id="pf-pw-save">Update password</button>
+            </form>
+          </div>
+
+          <div class="pf-info" id="pf-password-info" style="margin-top:20px;" hidden>
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i><span id="pf-password-info-text"></span>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="pf-footer">
+      <button type="button" id="dash-logout-btn" class="pf-logout"><i class="fa-solid fa-power-off" aria-hidden="true"></i> Log out</button>
+    </footer>
+  </aside>
+  <div class="pf-toasts" id="pf-toasts" role="status" aria-live="polite"></div>
+
+  <!-- Authentication Modal -->
+  <div id="auth-modal" class="modal-backdrop hidden auth-backdrop" aria-hidden="true">
+    <section class="auth-card" role="dialog" aria-modal="true" aria-labelledby="auth-title" tabindex="-1">
+
+      <!-- Pip the cat. Decorative only. Eyes follow input (auth.js); paws react to #auth-modal.auth-password-visible -->
+      <div class="auth-cat" id="auth-cat" aria-hidden="true">
+        <div class="cat-face">
+          <span class="cat-ear cat-ear-l"></span>
+          <span class="cat-ear cat-ear-r"></span>
+          <span class="cat-head">
+            <span class="cat-eye cat-eye-l"><i class="cat-pupil"></i></span>
+            <span class="cat-eye cat-eye-r"><i class="cat-pupil"></i></span>
+            <span class="cat-nose"></span>
+          </span>
+        </div>
+        <span class="cat-paw cat-paw-l"></span>
+        <span class="cat-paw cat-paw-r"></span>
+      </div>
+
+      <!-- Phone bottom sheet: drag handle (hidden on desktop). Swiping it down closes the sheet (auth-motion.js). -->
+      <div class="auth-grabber" aria-hidden="true"><span></span></div>
+
+      <button type="button" class="auth-close" aria-label="Close sign-in dialog" onclick="closeAuthModal()">
+        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+      </button>
+
+      <div class="auth-body">
+        <header class="auth-brand-row">
+          <img src="resources/thinkaheadlogo.jpeg" alt="" class="auth-brand-logo" onerror="this.style.display='none'">
+          <span class="auth-wordmark">ThinkAhead</span>
+        </header>
+
+        <p class="auth-kicker" id="auth-kicker">THINKAHEAD STUDENT LIBRARY</p>
+
+        <!-- Kept for screen readers only (auth.js updates these when the tab changes). The tabs below are the visible title. -->
+        <div class="auth-heading">
+          <h2 id="auth-title">Sign in</h2>
+          <p class="auth-heading-copy" id="auth-heading-copy">Open your study space and pick up where you left off.</p>
+        </div>
+
+        <div class="auth-tabs" role="tablist" aria-label="Choose sign-in or sign-up">
+          <button type="button" class="tab-btn active" id="tab-login" role="tab" aria-selected="true" aria-controls="login-form" tabindex="0" onclick="switchAuthTab('login')">Sign in</button>
+          <button type="button" class="tab-btn" id="tab-signup" role="tab" aria-selected="false" aria-controls="signup-form-container" tabindex="-1" onclick="switchAuthTab('signup')">Create account</button>
+        </div>
+
+        <div id="login-error" class="auth-message auth-message-error hidden" role="alert" aria-live="assertive"></div>
+        <div id="login-success" class="auth-message auth-message-success hidden" role="status" aria-live="polite"></div>
+
+        <div class="auth-panels" id="auth-panels">
+
+        <!-- SIGN IN -->
+        <form id="login-form" class="auth-form" role="tabpanel" aria-labelledby="tab-login">
+          <div class="form-group auth-field">
+            <label for="username-input">Username, phone, or teacher email</label>
+            <div class="input-wrapper auth-input-wrap">
+              <i class="fa-regular fa-user input-icon" aria-hidden="true"></i>
+              <input type="text" id="username-input" placeholder="Your username or phone" required autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="next">
+            </div>
+          </div>
+          <div class="form-group auth-field">
+            <div class="auth-label-row">
+              <label for="password-input">Password</label>
+              <a class="auth-forgot" href="https://wa.me/9779826109280?text=Hello%20Teacher%2C%20I%20forgot%20my%20ThinkAhead%20password.%20Please%20help%20me%20reset%20it." target="_blank" rel="noopener">Forgot password?</a>
+            </div>
+            <div class="input-wrapper auth-input-wrap">
+              <i class="fa-solid fa-lock input-icon" aria-hidden="true"></i>
+              <input class="auth-password" type="password" id="password-input" placeholder="Enter your password" required autocomplete="current-password" enterkeyhint="go">
+              <button type="button" class="auth-password-toggle" aria-label="Show password" aria-controls="password-input" onclick="togglePasswordVisibility('password-input', this)"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+            </div>
+          </div>
+          <button type="submit" class="btn-primary-glass auth-submit"><span data-auth-label>Sign in</span><i class="fa-solid fa-arrow-right auth-submit-arrow" aria-hidden="true"></i></button>
+        </form>
+
+        <!-- CREATE ACCOUNT -->
+        <div id="signup-form-container" class="hidden" role="tabpanel" aria-labelledby="tab-signup" aria-hidden="true">
+          <form id="phone-otp-form" class="auth-form">
+            <div class="form-group auth-field">
+              <label for="signup-name">Full name</label>
+              <div class="input-wrapper auth-input-wrap">
+                <i class="fa-regular fa-id-card input-icon" aria-hidden="true"></i>
+                <input type="text" id="signup-name" placeholder="Your full name" required autocomplete="name" maxlength="80" enterkeyhint="next">
+              </div>
+            </div>
+            <div class="form-group auth-field">
+              <label for="signup-phone">Phone number</label>
+              <div class="input-wrapper auth-input-wrap">
+                <i class="fa-solid fa-mobile-screen-button input-icon" aria-hidden="true"></i>
+                <input type="tel" id="signup-phone" placeholder="98XXXXXXXX" required autocomplete="tel" inputmode="tel" enterkeyhint="next">
+              </div>
+            </div>
+            <div class="form-group auth-field">
+              <label for="signup-password">Create password</label>
+              <div class="input-wrapper auth-input-wrap">
+                <i class="fa-solid fa-lock input-icon" aria-hidden="true"></i>
+                <input class="auth-password" type="password" id="signup-password" placeholder="At least 6 characters" required autocomplete="new-password" minlength="6" maxlength="100" enterkeyhint="next">
+                <button type="button" class="auth-password-toggle" aria-label="Show password" aria-controls="signup-password" onclick="togglePasswordVisibility('signup-password', this)"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+              </div>
+            </div>
+            <div class="form-group auth-field">
+              <label for="signup-confirm-password">Confirm password</label>
+              <div class="input-wrapper auth-input-wrap">
+                <i class="fa-solid fa-shield-halved input-icon" aria-hidden="true"></i>
+                <input class="auth-password" type="password" id="signup-confirm-password" placeholder="Type it once more" required autocomplete="new-password" enterkeyhint="go">
+                <button type="button" class="auth-password-toggle" aria-label="Show password" aria-controls="signup-confirm-password" onclick="togglePasswordVisibility('signup-confirm-password', this)"><i class="fa-regular fa-eye" aria-hidden="true"></i></button>
+              </div>
+            </div>
+            <button type="submit" id="complete-signup-btn" class="btn-primary-glass auth-submit"><span data-auth-label>Create account</span><i class="fa-solid fa-arrow-right auth-submit-arrow" aria-hidden="true"></i></button>
+          </form>
+        </div>
+
+        </div>
+
+        <div class="auth-divider"><span>or continue with</span></div>
+        <button type="button" id="google-btn" class="btn-google auth-google" onclick="signInWithGoogle()">
+          <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 7.1-10.1 7.1-17.5z"/>
+            <path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 0 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/>
+            <path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.5-5.8c-2.1 1.4-4.8 2.3-8.4 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/>
+          </svg>
+          <span>Continue with Google</span>
+        </button>
+
+        <p class="auth-fineprint"><a class="auth-privacy" href="privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
+      </div>
+    </section>
+  </div>
   <!-- Payment Modal -->
   <div id="payment-modal" class="modal-backdrop hidden">
     <div class="glass-modal payment-modal-content">
@@ -416,8 +614,10 @@
 <script src="pdf-viewer.js"></script>
   <script src="filter.js"></script>
   <script src="auth.js"></script>
+  <script src="auth-motion.js"></script>
   
   <script src="feedback.js"></script>
+  <script src="profile.js"></script>
 
   <script>
   (function () {

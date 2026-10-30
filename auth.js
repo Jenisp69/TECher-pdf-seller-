@@ -45,24 +45,57 @@ function startGlobalSessionGuard() {
 function togglePasswordVisibility(inputId, iconElement) {
   const input = document.getElementById(inputId);
   if (!input) return;
-  if (input.type === 'password') {
-    input.type = 'text';
-    iconElement.classList.remove('fa-eye');
-    iconElement.classList.add('fa-eye-slash');
-  } else {
-    input.type = 'password';
-    iconElement.classList.remove('fa-eye-slash');
-    iconElement.classList.add('fa-eye');
-  }
+  const showPassword = input.type === 'password';
+  input.type = showPassword ? 'text' : 'password';
+
+  const icon = iconElement.querySelector('i') || iconElement;
+  icon.classList.toggle('fa-eye', !showPassword);
+  icon.classList.toggle('fa-eye-slash', showPassword);
+  iconElement.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+  updateAuthBuddy();
 }
 
+function updateAuthBuddy() {
+  const modal = document.getElementById('auth-modal');
+  const loginIsActive = !document.getElementById('login-form')?.classList.contains('hidden');
+  const activeForm = loginIsActive
+    ? document.getElementById('login-form')
+    : document.getElementById('phone-otp-form');
+  const passwordIsVisible = [...(activeForm?.querySelectorAll('.auth-password') || [])]
+    .some(input => input.type !== 'password');
+
+  modal?.classList.toggle('auth-password-visible', passwordIsVisible);
+}
+
+let authReturnFocus = null;
+
 function openAuthModal(defaultTab = 'login') {
+  const modal = document.getElementById('auth-modal');
+  if (!modal) return;
+  if (modal.classList.contains('hidden')) authReturnFocus = document.activeElement;
   switchAuthTab(defaultTab);
-  document.getElementById('auth-modal').classList.remove('hidden');
+  modal.classList.remove('hidden');
+  modal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('auth-modal-open');
+  requestAnimationFrame(() => {
+    const dialog = modal.querySelector('.auth-card');
+    const firstField = defaultTab === 'signup' ? document.getElementById('signup-name') : document.getElementById('username-input');
+    // Touch screens: do not pop the keyboard open straight away, so the whole sheet is visible first
+    const touchOnly = window.matchMedia('(pointer: coarse)').matches;
+    (touchOnly ? dialog : (firstField || dialog))?.focus();
+  });
 }
 
 function closeAuthModal() {
-  document.getElementById('auth-modal').classList.add('hidden');
+  const modal = document.getElementById('auth-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('auth-modal-open');
+  if (authReturnFocus && authReturnFocus.isConnected && typeof authReturnFocus.focus === 'function') {
+    authReturnFocus.focus();
+  }
+  authReturnFocus = null;
 }
 
 function switchAuthTab(tab) {
@@ -81,13 +114,82 @@ function switchAuthTab(tab) {
     signupContainer?.classList.add('hidden');
     tabLogin?.classList.add('active');
     tabSignup?.classList.remove('active');
+    tabLogin?.setAttribute('aria-selected', 'true');
+    tabSignup?.setAttribute('aria-selected', 'false');
+    tabLogin?.setAttribute('tabindex', '0');
+    tabSignup?.setAttribute('tabindex', '-1');
+    signupContainer?.setAttribute('aria-hidden', 'true');
+    loginForm?.setAttribute('aria-hidden', 'false');
+    document.getElementById('auth-kicker').textContent = 'THINKAHEAD STUDENT LIBRARY';
+    document.getElementById('auth-title').textContent = 'Sign in';
+    document.getElementById('auth-heading-copy').textContent = 'Open your study space and pick up where you left off.';
   } else {
     loginForm?.classList.add('hidden');
     signupContainer?.classList.remove('hidden');
     tabLogin?.classList.remove('active');
     tabSignup?.classList.add('active');
+    tabLogin?.setAttribute('aria-selected', 'false');
+    tabSignup?.setAttribute('aria-selected', 'true');
+    tabLogin?.setAttribute('tabindex', '-1');
+    tabSignup?.setAttribute('tabindex', '0');
+    signupContainer?.setAttribute('aria-hidden', 'false');
+    loginForm?.setAttribute('aria-hidden', 'true');
+    document.getElementById('auth-kicker').textContent = 'THINKAHEAD STUDENT LIBRARY';
+    document.getElementById('auth-title').textContent = 'Create account';
+    document.getElementById('auth-heading-copy').textContent = 'Set up your space for learning and notes.';
   }
+  updateAuthBuddy();
 }
+
+function setAuthButtonBusy(button, busy, busyLabel) {
+  if (!button) return;
+  const label = button.querySelector('[data-auth-label]');
+  if (label) {
+    if (!label.dataset.idleLabel) label.dataset.idleLabel = label.textContent;
+    label.textContent = busy ? busyLabel : label.dataset.idleLabel;
+  }
+  button.disabled = busy;
+  button.setAttribute('aria-busy', busy ? 'true' : 'false');
+}
+
+// Keep modal keyboard use contained and let Escape/backdrop close it.
+document.addEventListener('keydown', (event) => {
+  const modal = document.getElementById('auth-modal');
+  if (!modal || modal.classList.contains('hidden')) return;
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeAuthModal();
+    return;
+  }
+
+  if (event.key === 'Tab') {
+    const focusable = [...modal.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter(element => element.getClientRects().length > 0);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+});
+
+document.getElementById('auth-modal')?.addEventListener('click', (event) => {
+  if (event.target === event.currentTarget) closeAuthModal();
+});
+
+document.querySelector('.auth-tabs')?.addEventListener('keydown', (event) => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const target = event.key === 'Home' || event.key === 'ArrowLeft' ? 'login' : 'signup';
+  switchAuthTab(target);
+  document.getElementById(target === 'login' ? 'tab-login' : 'tab-signup')?.focus();
+});
 
 /* ==========================================
    GOOGLE SIGN-IN
@@ -97,7 +199,13 @@ function switchAuthTab(tab) {
    ========================================== */
 async function signInWithGoogle() {
   const errorDiv = document.getElementById('login-error');
+  const button = document.getElementById('google-btn');
   if (errorDiv) errorDiv.classList.add('hidden');
+  if (button) {
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    button.querySelector('span').textContent = 'Connecting to Google…';
+  }
   try {
     sessionStorage.setItem('google_login_pending', '1');
     const { error } = await supabaseClient.auth.signInWithOAuth({
@@ -110,6 +218,11 @@ async function signInWithGoogle() {
     if (error) throw error;
   } catch (e) {
     sessionStorage.removeItem('google_login_pending');
+    if (button) {
+      button.disabled = false;
+      button.removeAttribute('aria-busy');
+      button.querySelector('span').textContent = 'Continue with Google';
+    }
     if (errorDiv) {
       errorDiv.textContent = 'Could not start Google sign-in. Please try again.';
       errorDiv.classList.remove('hidden');
@@ -201,10 +314,13 @@ async function handleTeacherLogin(email, password, errorDiv) {
 // Login Handler
 async function handleLogin(event) {
   event.preventDefault();
-  
+  const submitButton = event.currentTarget.querySelector('[type="submit"]');
+  const errorDiv = document.getElementById('login-error');
+  setAuthButtonBusy(submitButton, true, 'Signing in…');
+
+  try {
   const identifier = document.getElementById('username-input').value.trim();
   const password = document.getElementById('password-input').value.trim();
-  const errorDiv = document.getElementById('login-error');
 
   errorDiv.classList.add('hidden');
 
@@ -236,6 +352,13 @@ async function handleLogin(event) {
   }
 
   startStudentSession(data.student, data.token);
+  } catch (error) {
+    console.error('Sign-in failed:', error);
+    errorDiv.textContent = 'Could not reach the server. Please check your internet and try again.';
+    errorDiv.classList.remove('hidden');
+  } finally {
+    setAuthButtonBusy(submitButton, false);
+  }
 }
 
 /* ==========================================
@@ -286,6 +409,7 @@ async function updateUIForUser(student) {
     loginBtn?.classList.add('hidden');
     userProfile?.classList.remove('hidden');
     if (userNameEl) userNameEl.textContent = student.full_name;
+    if (window.StudentProfile) window.StudentProfile.attach(student);
 
     if (heroBadge) heroBadge.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> Student Dashboard';
     if (heroTitle) heroTitle.textContent = `Welcome back, ${student.full_name}!`;
@@ -313,6 +437,7 @@ async function updateUIForUser(student) {
 
     enrolledSec?.classList.add('hidden');
     userEnrollmentsSet.clear();
+    if (window.StudentProfile) window.StudentProfile.detach();
   }
 
   applyCatalogFilters();
@@ -476,7 +601,7 @@ function closePaymentModal() {
 function confirmPaymentRequest() {
   if (!activePaymentSubject) return;
   const priceNpr = Number(activePaymentSubject.price_npr || 0);
-  const text = `Hello Teacher, I want to enroll in "${activePaymentSubject.subject_name}" for NPR ${priceNpr}. My username/phone is: ${currentStudentUser?.phone_number || currentStudentUser?.username || ''}. I have attached my payment voucher screenshot.`;
+  const text = `Hello Teacher, I want to enroll in "${activePaymentSubject.subject_name}" for NPR ${priceNpr}. My username/phone is: ${currentStudentUser?.contact_phone || currentStudentUser?.phone_number || currentStudentUser?.username || ''}. I have attached my payment voucher screenshot.`;
   window.open(`https://wa.me/9779826109280?text=${encodeURIComponent(text)}`, '_blank');
   closePaymentModal();
 }
@@ -555,13 +680,16 @@ document.getElementById('login-form')?.addEventListener('submit', handleLogin);
 // Direct Sign Up Form Listener
 document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) => {
   e.preventDefault();
+  const submitButton = e.currentTarget.querySelector('[type="submit"]');
+  const errorDiv = document.getElementById('login-error');
+  setAuthButtonBusy(submitButton, true, 'Creating account…');
+
+  try {
   
   const name = document.getElementById('signup-name').value.trim();
   const phone = document.getElementById('signup-phone').value.trim();
   const password = document.getElementById('signup-password').value.trim();
   const confirmPassword = document.getElementById('signup-confirm-password').value.trim();
-  const errorDiv = document.getElementById('login-error');
-
   if (errorDiv) errorDiv.classList.add('hidden');
 
   if (password !== confirmPassword) {
@@ -601,6 +729,15 @@ document.getElementById('phone-otp-form')?.addEventListener('submit', async (e) 
   }
 
   startStudentSession(data.student, data.token);
+  } catch (error) {
+    console.error('Sign-up failed:', error);
+    if (errorDiv) {
+      errorDiv.textContent = 'Could not reach the server. Please check your internet and try again.';
+      errorDiv.classList.remove('hidden');
+    }
+  } finally {
+    setAuthButtonBusy(submitButton, false);
+  }
 });
 
 document.getElementById('dash-logout-btn')?.addEventListener('click', () => {
@@ -639,3 +776,106 @@ function switchMissionLang(lang) {
     enContent.classList.add('hidden');
   }
 }
+
+/* ==========================================================
+   PIP THE CAT + auth modal helpers (visual only; no auth logic)
+   - eyes follow the mouse (mouse only, never touch)
+   - while typing, Pip "reads along" with the caret
+   - one small head-shake when an error message appears
+   - passwords are hidden again whenever the modal closes
+   - mobile: the card shrinks to the visible area above the keyboard
+   The paws-over-eyes reaction is pure CSS, driven by
+   updateAuthBuddy() above (it reads the real input type).
+   ========================================================== */
+(function initAuthExtras() {
+  const modal = document.getElementById('auth-modal');
+  const cat = document.getElementById('auth-cat');
+  if (!modal) return;
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  function look(x, y) {
+    if (!cat) return;
+    cat.style.setProperty('--lx', x.toFixed(2));
+    cat.style.setProperty('--ly', y.toFixed(2));
+  }
+
+  /* 1. Eyes follow the mouse, limited to a small range */
+  if (cat) {
+    let frame = 0, px = 0, py = 0;
+    document.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'mouse' || reduceMotion.matches || modal.classList.contains('hidden')) return;
+      px = e.clientX;
+      py = e.clientY;
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        const r = cat.getBoundingClientRect();
+        const dx = px - (r.left + r.width / 2);
+        const dy = py - (r.top + r.height * 0.6);
+        const dist = Math.hypot(dx, dy) || 1;
+        const strength = Math.min(1, dist / 160);   // looks harder the farther the mouse is, capped
+        look((dx / dist) * strength, (dy / dist) * strength);
+      });
+    }, { passive: true });
+
+    /* 2. Typing: look down and slide along with the caret (works on phones too) */
+    modal.addEventListener('input', (e) => {
+      const el = e.target;
+      if (!(el instanceof HTMLInputElement) || reduceMotion.matches) return;
+      const pos = el.selectionStart == null ? el.value.length : el.selectionStart;
+      look(clamp(-0.85 + (pos / 20) * 1.7, -0.85, 0.85), 0.8);
+    });
+    modal.addEventListener('focusout', () => look(0, 0));
+
+    /* 3. Error message appears -> one small shake */
+    const err = document.getElementById('login-error');
+    if (err) {
+      new MutationObserver(() => {
+        if (err.classList.contains('hidden')) return;
+        cat.classList.remove('is-oops');
+        void cat.offsetWidth;            // restart the animation
+        cat.classList.add('is-oops');
+      }).observe(err, { attributes: true, attributeFilter: ['class'] });
+      cat.addEventListener('animationend', (e) => {
+        if (e.animationName === 'cat-nope') cat.classList.remove('is-oops');
+      });
+    }
+  }
+
+  /* 4. When the modal closes: re-hide any revealed password and re-centre Pip */
+  function resetPasswordVisibility() {
+    modal.querySelectorAll('.auth-password').forEach((input) => {
+      if (input.type === 'password') return;
+      input.type = 'password';
+      const toggle = input.parentElement && input.parentElement.querySelector('.auth-password-toggle');
+      if (!toggle) return;
+      const icon = toggle.querySelector('i');
+      if (icon) { icon.classList.add('fa-eye'); icon.classList.remove('fa-eye-slash'); }
+      toggle.setAttribute('aria-label', 'Show password');
+    });
+    updateAuthBuddy();
+  }
+  new MutationObserver(() => {
+    if (!modal.classList.contains('hidden')) return;
+    look(0, 0);
+    resetPasswordVisibility();
+  }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+
+  /* 5. Phones: keep the card inside the visible area when the keyboard is open */
+  if (window.visualViewport) {
+    const vv = window.visualViewport;
+    const setHeight = () => {
+      if (vv.scale > 1.01) return;   // ignore pinch-zoom
+      document.documentElement.style.setProperty('--au-vh', vv.height + 'px');
+    };
+    vv.addEventListener('resize', setHeight);
+    setHeight();
+  }
+  modal.addEventListener('focusin', (e) => {
+    const el = e.target;
+    if (!(el instanceof HTMLInputElement) || !window.matchMedia('(max-width: 520px)').matches) return;
+    setTimeout(() => el.scrollIntoView({ block: 'center', behavior: reduceMotion.matches ? 'auto' : 'smooth' }), 300);
+  });
+})();

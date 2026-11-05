@@ -138,6 +138,7 @@ async function initAdmin() {
   await fetchStudents();
   populateClassDropdowns();
   await fetchAndRenderFeedback();
+  if (window.AdminQuiz) window.AdminQuiz.init();   // quiz cards (admin-quiz.js)
   await importLevelsFromThisBrowser();
 }
 

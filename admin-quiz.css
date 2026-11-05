@@ -1,0 +1,113 @@
+/* ==========================================================
+   ThinkAhead teacher dashboard: Quiz cards
+   Every rule starts with .aq- or #quiz-admin-card / #quiz-scores-card, so the rest of the
+   dashboard is not affected. Uses the colour variables already defined in admin.css.
+   ========================================================== */
+
+.aq-form-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; color: var(--text-main); }
+
+.aq-textarea,
+.aq-number {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-main);
+  font-size: 0.95rem;
+  font-family: inherit;
+  padding: 10px 12px;
+  outline: none;
+  transition: var(--transition);
+}
+.aq-textarea { min-height: 84px; resize: vertical; }
+.aq-number { height: 42px; padding: 0 12px; }
+.aq-textarea:focus,
+.aq-number:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+.aq-number:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.aq-options { display: flex; flex-direction: column; gap: 8px; }
+.aq-option-row { display: flex; align-items: center; gap: 10px; }
+.aq-option-row input[type="radio"] { width: 20px; height: 20px; flex: none; accent-color: var(--success); cursor: pointer; }
+.aq-option-row input[type="radio"]:disabled { cursor: not-allowed; }
+.aq-option-row input[type="text"] { flex: 1 1 auto; min-width: 0; }
+.aq-letter {
+  flex: none; width: 28px; height: 28px; display: grid; place-items: center;
+  border-radius: 50%; font-size: 0.8rem; font-weight: 700;
+  background: var(--bg-input); border: 1px solid var(--border); color: var(--text-muted);
+}
+
+.aq-row { display: grid; grid-template-columns: 140px 1fr; gap: 12px; }
+
+.aq-note {
+  margin-bottom: 14px; padding: 10px 12px; border-radius: var(--radius);
+  font-size: 0.82rem; line-height: 1.45;
+  background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24;
+}
+.aq-error { min-height: 1.2em; margin-bottom: 10px; font-size: 0.85rem; color: var(--danger); }
+.aq-error.is-ok { color: var(--success); }
+
+.aq-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.aq-actions button { flex: 1 1 160px; }
+.aq-secondary { background: #64748b; }
+.aq-secondary:hover { background: #475569; }
+
+.aq-divider { border: 0; border-top: 1px solid var(--border); margin: 22px 0 16px; }
+
+.aq-list-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.aq-list-head h3 { margin: 0; }
+.aq-list-tools { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.aq-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; }
+.aq-check input { width: 16px; height: 16px; accent-color: var(--primary); }
+
+.aq-btn-sm {
+  width: auto; height: 34px; padding: 0 14px; font-size: 0.8rem;
+  background: var(--bg-input); border: 1px solid var(--border);
+}
+.aq-btn-sm:hover { background: #3f4f66; }
+.aq-btn-sm:disabled { opacity: 0.45; cursor: not-allowed; }
+.aq-btn-danger { background: var(--danger) !important; border-color: var(--danger) !important; }
+.aq-btn-danger:hover { background: var(--danger-hover) !important; }
+
+.aq-list { display: flex; flex-direction: column; gap: 10px; max-height: 640px; overflow-y: auto; padding-right: 2px; }
+.aq-empty { padding: 18px; text-align: center; font-size: 0.88rem; color: var(--text-muted); border: 1px dashed var(--border); border-radius: var(--radius); }
+.aq-empty.is-error { color: var(--danger); border-color: var(--danger); }
+.aq-muted { font-size: 0.78rem; color: var(--text-muted); }
+
+.aq-card { background: var(--bg-main); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.aq-card.is-archived { opacity: 0.65; border-style: dashed; }
+.aq-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.aq-card-text { font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+.aq-badges { display: flex; gap: 6px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.aq-badge { padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 700; white-space: nowrap; }
+.aq-badge-arch { background: rgba(148, 163, 184, 0.2); color: var(--text-muted); }
+.aq-badge-lock { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+
+.aq-meta { display: flex; gap: 14px; flex-wrap: wrap; margin: 8px 0 10px; font-size: 0.8rem; color: var(--text-muted); }
+
+.aq-opts { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.aq-opts li { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; padding: 6px 10px; border-radius: 6px; font-size: 0.88rem; background: var(--bg-card); border: 1px solid transparent; }
+.aq-opts li.is-correct { border-color: var(--success); background: rgba(16, 185, 129, 0.1); }
+.aq-opt-text { flex: 1 1 140px; min-width: 0; overflow-wrap: anywhere; }
+.aq-tick { font-size: 0.75rem; font-weight: 700; color: var(--success); }
+.aq-picks { font-size: 0.75rem; color: var(--text-muted); }
+
+.aq-card-actions { display: flex; gap: 8px; }
+
+.aq-score-row { background: var(--bg-main); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; }
+.aq-score-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.aq-score-who { flex: 1 1 160px; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.aq-score-num { font-size: 0.85rem; font-weight: 600; color: var(--text-main); white-space: nowrap; }
+
+.aq-details { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.aq-answer { padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--border); background: var(--bg-card); font-size: 0.85rem; }
+.aq-answer.is-right { border-left-color: var(--success); }
+.aq-answer.is-wrong { border-left-color: var(--danger); }
+.aq-answer-q { font-weight: 600; overflow-wrap: anywhere; }
+.aq-answer-a { margin: 2px 0; color: var(--text-muted); overflow-wrap: anywhere; }
+
+@media (max-width: 480px) {
+  .aq-row { grid-template-columns: 1fr; }
+  .aq-card-head { flex-direction: column; }
+  .aq-badges { justify-content: flex-start; }
+  .aq-score-line .aq-btn-sm { width: 100%; }
+}

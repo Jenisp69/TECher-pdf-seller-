@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="profile.css">
   <link rel="stylesheet" href="auth.css">
+  <link rel="stylesheet" href="quiz.css">
 
 
   <script>
@@ -133,6 +134,20 @@
     <span class="section-subtitle">Your active unlocked study subjects and resources</span>
   </div>
   <div id="enrolled-courses-list" class="course-grid"></div>
+</section>
+
+<!-- Quiz entry card (shown only when a student is logged in; behaviour in quiz.js) -->
+<section id="quiz-entry-section" class="section-container hidden">
+  <div class="glass-card qz-entry">
+    <div class="qz-entry-text">
+      <h2><i class="fa-solid fa-circle-question"></i> Quiz Challenge</h2>
+      <span class="section-subtitle" id="qz-entry-sub">Test yourself and earn points for every correct answer.</span>
+    </div>
+    <div class="qz-entry-side">
+      <div class="qz-score-pill" id="qz-entry-score" hidden><i class="fa-solid fa-trophy" aria-hidden="true"></i><b id="qz-entry-points">0</b><span>pts</span></div>
+      <button type="button" class="btn-primary-glass qz-open-btn" id="qz-open-btn"><i class="fa-solid fa-play"></i> Open Quiz</button>
+    </div>
+  </div>
 </section>
 
 <!-- Free Books Section -->
@@ -567,6 +582,26 @@
     </div>
   </div>
 
+  <!-- Quiz screen (opened from the Quiz Challenge card; behaviour in quiz.js) -->
+  <div id="quiz-section" class="hidden">
+    <nav class="qz-nav">
+      <button type="button" id="quiz-back-btn" class="btn-sm" aria-label="Back to portal">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>Back to Portal</span>
+      </button>
+      <div class="qz-nav-title">Quiz</div>
+      <div class="qz-score-pill" title="Your total score"><i class="fa-solid fa-trophy" aria-hidden="true"></i><b id="qz-points">0</b><span>pts</span></div>
+    </nav>
+    <div class="container qz-body">
+      <div class="qz-tabs" role="tablist" aria-label="Quiz questions">
+        <button type="button" class="pill-btn active" id="qz-tab-todo" role="tab" aria-selected="true">To answer <span id="qz-count-todo">0</span></button>
+        <button type="button" class="pill-btn" id="qz-tab-done" role="tab" aria-selected="false">Answered <span id="qz-count-done">0</span></button>
+      </div>
+      <div id="qz-status" class="qz-status" role="status" aria-live="polite"></div>
+      <div id="qz-list" class="qz-list"></div>
+    </div>
+  </div>
+
   <!-- Canvas PDF Reader Section -->
   <div id="reader-section" class="hidden">
     <nav class="reader-nav">
@@ -618,6 +653,7 @@
   
   <script src="feedback.js"></script>
   <script src="profile.js"></script>
+  <script src="quiz.js"></script>
 
   <script>
   (function () {

@@ -410,6 +410,7 @@ async function updateUIForUser(student) {
     userProfile?.classList.remove('hidden');
     if (userNameEl) userNameEl.textContent = student.full_name;
     if (window.StudentProfile) window.StudentProfile.attach(student);
+    if (window.QuizModule) window.QuizModule.attach(student);
 
     if (heroBadge) heroBadge.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> Student Dashboard';
     if (heroTitle) heroTitle.textContent = `Welcome back, ${student.full_name}!`;
@@ -438,6 +439,7 @@ async function updateUIForUser(student) {
     enrolledSec?.classList.add('hidden');
     userEnrollmentsSet.clear();
     if (window.StudentProfile) window.StudentProfile.detach();
+    if (window.QuizModule) window.QuizModule.detach();
   }
 
   applyCatalogFilters();

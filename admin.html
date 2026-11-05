@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ThinkAhead Teacher Dashboard</title>
   <link rel="stylesheet" href="admin.css">
+  <link rel="stylesheet" href="admin-quiz.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   
   <!-- PDF.js scripts -->
@@ -334,6 +335,72 @@
       </div>
     </div>
 
+    <!-- CARD 6: QUIZ QUESTIONS (behaviour in admin-quiz.js) -->
+    <div class="admin-card" id="quiz-admin-card">
+      <h2>🧠 Quiz Questions</h2>
+
+      <form id="aq-form" novalidate>
+        <div class="aq-form-title" id="aq-form-title">New question</div>
+
+        <div class="form-group">
+          <label for="aq-text">Question</label>
+          <textarea id="aq-text" class="aq-textarea" rows="3" maxlength="1000" placeholder="Type the question here"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Options (tick the correct one)</label>
+          <div id="aq-options" class="aq-options"></div>
+        </div>
+
+        <div class="aq-row">
+          <div class="form-group">
+            <label for="aq-points">Points</label>
+            <input type="number" id="aq-points" class="aq-number" min="1" max="1000" step="1" value="1" inputmode="numeric">
+          </div>
+          <div class="form-group">
+            <label for="aq-subject">Subject (optional)</label>
+            <select id="aq-subject">
+              <option value="">General (no subject)</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="aq-lock-note" class="aq-note hidden">
+          🔒 Students have already answered this question, so its correct option, points and number of options are locked.
+          You can still fix the wording and change the subject.
+        </div>
+        <div id="aq-form-error" class="aq-error" role="alert"></div>
+
+        <div class="aq-actions">
+          <button type="submit" id="aq-save-btn">Save question</button>
+          <button type="button" id="aq-cancel-btn" class="aq-secondary hidden">Cancel edit</button>
+        </div>
+      </form>
+
+      <hr class="aq-divider">
+
+      <div class="aq-list-head">
+        <h3>All questions</h3>
+        <div class="aq-list-tools">
+          <label class="aq-check"><input type="checkbox" id="aq-show-archived"> Show archived</label>
+          <button type="button" id="aq-refresh-btn" class="aq-btn-sm">Refresh</button>
+        </div>
+      </div>
+      <div id="aq-list" class="aq-list"></div>
+    </div>
+
+    <!-- CARD 7: STUDENT QUIZ SCORES -->
+    <div class="admin-card" id="quiz-scores-card">
+      <div class="aq-list-head">
+        <h2 style="margin:0;">🏆 Student Quiz Scores</h2>
+        <button type="button" id="aq-scores-refresh-btn" class="aq-btn-sm">Refresh</button>
+      </div>
+      <div class="form-group">
+        <input type="text" id="aq-score-search" placeholder="Search student name or username" autocomplete="off">
+      </div>
+      <div id="aq-scores" class="aq-list"></div>
+    </div>
+
   </div> <!-- container end -->
 
 
@@ -372,5 +439,6 @@
 
   <script src="config.js"></script>
   <script src="admin.js"></script>
+  <script src="admin-quiz.js"></script>
 </body>
 </html>

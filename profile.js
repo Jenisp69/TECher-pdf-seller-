@@ -698,6 +698,7 @@
     const overlay = $('pf-overlay');
     drawer.classList.remove('is-open');
     overlay.classList.remove('is-open');
+    setTimeout(() => { if (!state.open) drawer.classList.remove('is-full'); }, 480);
     $('profile-trigger').setAttribute('aria-expanded', 'false');
     document.body.style.overflow = '';
     if (state.pendingAvatar) cancelPendingPhoto();
@@ -726,12 +727,65 @@
     else if (!$('pf-drawer').contains(document.activeElement)) { event.preventDefault(); first.focus(); }
   }
 
+  /* ---------------- phone sheet: drag the handle up for full screen, down to shrink or close ---------------- */
+  function initSheetDrag() {
+    const drawer = $('pf-drawer');
+    const grab = $('pf-grabber');
+    if (!drawer || !grab) return;
+    const phone = window.matchMedia('(max-width: 640px)');
+    let d = null;
+
+    const fullPx = () => window.innerHeight;
+    const halfPx = () => Math.round(window.innerHeight * 0.8);
+
+    grab.addEventListener('pointerdown', (e) => {
+      if (!phone.matches) return;
+      const full = drawer.classList.contains('is-full');
+      d = { id: e.pointerId, y0: e.clientY, last: e.clientY, t: e.timeStamp, v: 0, dy: 0, full: full, moved: false };
+      drawer.classList.add('is-dragging');
+      try { grab.setPointerCapture(e.pointerId); } catch (err) { /* not critical */ }
+    });
+
+    grab.addEventListener('pointermove', (e) => {
+      if (!d || e.pointerId !== d.id) return;
+      d.dy = e.clientY - d.y0;
+      const dt = Math.max(1, e.timeStamp - d.t);
+      d.v = 0.8 * d.v + 0.2 * ((e.clientY - d.last) / dt);
+      d.last = e.clientY; d.t = e.timeStamp;
+      if (Math.abs(d.dy) > 4) d.moved = true;
+      if (!d.moved) return;
+      const base = d.full ? fullPx() : halfPx();
+      const h = Math.min(fullPx(), Math.max(halfPx(), base - d.dy));
+      const shrunk = base - h;                       // how much height the drag already used up
+      const pulled = Math.max(0, d.dy - shrunk);     // the rest drags the whole sheet down
+      drawer.style.height = h + 'px';
+      drawer.style.transform = pulled > 0 ? 'translateY(' + pulled + 'px)' : '';
+      d.pulled = pulled; d.h = h;
+    });
+
+    function end(e) {
+      if (!d || e.pointerId !== d.id) return;
+      const s = d; d = null;
+      try { grab.releasePointerCapture(e.pointerId); } catch (err) { /* not critical */ }
+      drawer.classList.remove('is-dragging');
+      drawer.style.height = ''; drawer.style.transform = '';
+      if (!s.moved) { drawer.classList.toggle('is-full'); return; }   // a tap on the handle toggles
+      if ((s.pulled || 0) > 110 || (s.v > 0.7 && !s.full)) { closeDrawer(); return; }
+      const mid = (halfPx() + fullPx()) / 2;
+      const goFull = (s.h || 0) > mid || s.v < -0.5;
+      drawer.classList.toggle('is-full', goFull);
+    }
+    grab.addEventListener('pointerup', end);
+    grab.addEventListener('pointercancel', end);
+  }
+
   /* ---------------- wiring (once) ---------------- */
   function wire() {
     if (state.wired) return;
     if (!$('pf-drawer') || !$('profile-trigger')) return;
     state.wired = true;
 
+    initSheetDrag();
     $('pf-drawer').setAttribute('inert', '');
     $('profile-trigger').addEventListener('click', () => (state.open ? closeDrawer() : openDrawer('profile')));
     $('pf-close').addEventListener('click', closeDrawer);

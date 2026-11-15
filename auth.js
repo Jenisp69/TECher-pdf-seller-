@@ -368,6 +368,8 @@ async function handleLogin(event) {
 // Master Load Data & Render Dashboard
 async function updateUIForUser(student) {
   currentStudentUser = student;
+  // student mode = the compact app layout (tab bar, views, welcome strip); guests keep the landing page
+  document.documentElement.classList.toggle('is-student', !!student);
 
   const loginBtn = document.getElementById('nav-login-btn');
   const userProfile = document.getElementById('nav-user-profile');
@@ -414,11 +416,9 @@ async function updateUIForUser(student) {
 
     if (heroBadge) heroBadge.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> Student Dashboard';
     if (heroTitle) heroTitle.textContent = `Welcome back, ${student.full_name}!`;
-    if (heroSubtitle) heroSubtitle.textContent = 'Manage your enrolled coursework, explore free reading books, or expand your study list.';
-    if (heroCtaBtn) {
-      heroCtaBtn.innerHTML = '<i class="fa-solid fa-circle-play"></i> Jump to Enrolled Subjects';
-      heroCtaBtn.onclick = () => scrollToSection('enrolled-section');
-    }
+    // the dashboard shows the courses straight away, so no intro sentence and no "jump to" button for students
+    if (heroSubtitle) heroSubtitle.textContent = '';
+    if (heroCtaBtn) heroCtaBtn.onclick = null;
 
     enrolledSec?.classList.remove('hidden');
 
@@ -443,6 +443,25 @@ async function updateUIForUser(student) {
   }
 
   applyCatalogFilters();
+
+  // tell the navigation what the student has (badges, which view to open first)
+  if (window.ThinkNav) {
+    window.ThinkNav.setCounts(computeNavCounts());
+    window.ThinkNav.ready(student || null);
+  }
+}
+
+// How many resources each section holds (unfiltered), used for the badges and the empty-state wording
+function computeNavCounts() {
+  const counts = { courses: 0, free: 0, premium: 0, freeInCourses: 0 };
+  allSubjectsCache.filter(s => Number(s.total_pages || 0) > 0).forEach(s => {
+    const isFree = s.is_free === true || Number(s.price_npr) === 0;
+    const isEnrolled = !!currentStudentUser && userEnrollmentsSet.has(s.id);
+    if (isEnrolled) { counts.courses++; if (isFree) counts.freeInCourses++; }
+    else if (isFree) counts.free++;
+    else counts.premium++;
+  });
+  return counts;
 }
 
 window.applyCatalogFilters = function() {
@@ -453,7 +472,38 @@ window.applyCatalogFilters = function() {
   renderCategorizedSections(filtered);
 };
 
-// Render Categorized Sections using DocumentFragments for high performance
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, ch => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+  ));
+}
+
+// A friendly box for an empty list, with the next useful action
+function buildEmptyState(icon, title, text, actions) {
+  const box = document.createElement('div');
+  box.className = 'empty-state';
+  box.innerHTML = `<i class="fa-solid ${icon} es-icon" aria-hidden="true"></i><h3></h3><p></p>`;
+  box.querySelector('h3').textContent = title;
+  box.querySelector('p').textContent = text;
+  if (actions && actions.length) {
+    const row = document.createElement('div');
+    row.className = 'es-actions';
+    actions.forEach(act => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn-pill' + (act.ghost ? ' ghost' : '');
+      b.textContent = act.label;
+      if (act.nav) b.dataset.nav = act.nav;
+      if (act.action) b.dataset.action = act.action;
+      row.appendChild(b);
+    });
+    box.appendChild(row);
+  }
+  return box;
+}
+
+// Render Categorized Sections using DocumentFragments for high performance.
+// A resource appears in exactly ONE section: enrolled > free > premium.
 function renderCategorizedSections(subjectsList) {
   const enrolledGrid = document.getElementById('enrolled-courses-list');
   const freeBooksGrid = document.getElementById('free-books-list');
@@ -479,18 +529,13 @@ function renderCategorizedSections(subjectsList) {
     const isEnrolled = userEnrollmentsSet.has(subject.id);
 
     if (currentStudentUser) {
-      // 1. If enrolled, show in Enrolled section
       if (isEnrolled) {
         renderCard(subject, fragEnrolled, 'enrolled');
         enrolledCount++;
-      }
-      
-      // 2. If free, also show in Free Books section (even if enrolled)
-      if (isFree) {
+      } else if (isFree) {
         renderCard(subject, fragFree, 'free');
         freeCount++;
-      } else if (!isEnrolled) {
-        // 3. Otherwise, if paid and not enrolled, show in Premium/Missing section
+      } else {
         renderCard(subject, fragMissing, 'missing');
         missingCount++;
       }
@@ -505,9 +550,16 @@ function renderCategorizedSections(subjectsList) {
     }
   });
 
+  const totals = computeNavCounts();
+  const filtering = !!(window.CatalogFilter && window.CatalogFilter.hasActive());
+  const clearAction = { label: 'Clear filters', action: 'clear-filters' };
+
   if (enrolledGrid) {
     if (currentStudentUser && enrolledCount === 0) {
-      enrolledGrid.innerHTML = '<p class="empty-text">No enrolled subjects match your filter selection.</p>';
+      enrolledGrid.appendChild(filtering && totals.courses > 0
+        ? buildEmptyState('fa-filter', 'No courses match these filters', 'Try a different selection, or clear the filters to see all your courses.', [clearAction])
+        : buildEmptyState('fa-book-open', 'No courses unlocked yet', 'Courses your teacher unlocks for you will appear here. Free books are open to everyone in the meantime.',
+            [{ label: 'Browse free books', nav: 'free' }, { label: 'See premium courses', nav: 'premium', ghost: true }]));
     } else {
       enrolledGrid.appendChild(fragEnrolled);
     }
@@ -515,7 +567,13 @@ function renderCategorizedSections(subjectsList) {
 
   if (freeBooksGrid) {
     if (freeCount === 0) {
-      freeBooksGrid.innerHTML = '<p class="empty-text">No free books found for this selection.</p>';
+      if (filtering && totals.free > 0) {
+        freeBooksGrid.appendChild(buildEmptyState('fa-filter', 'No free books match these filters', 'Try a different selection, or clear the filters.', [clearAction]));
+      } else if (currentStudentUser && totals.freeInCourses > 0) {
+        freeBooksGrid.appendChild(buildEmptyState('fa-circle-check', 'Your free books are already in My Courses', 'Every free book is already in your courses. New free material will show up here.', [{ label: 'Go to My Courses', nav: 'courses' }]));
+      } else {
+        freeBooksGrid.appendChild(buildEmptyState('fa-gift', 'No free books yet', 'New free material is added regularly. Please check back soon.', []));
+      }
     } else {
       freeBooksGrid.appendChild(fragFree);
     }
@@ -523,49 +581,61 @@ function renderCategorizedSections(subjectsList) {
 
   if (missingGrid) {
     if (missingCount === 0) {
-      missingGrid.innerHTML = '<p class="empty-text">No additional premium courses found for this selection.</p>';
+      if (filtering && totals.premium > 0) {
+        missingGrid.appendChild(buildEmptyState('fa-filter', 'No premium courses match these filters', 'Try a different selection, or clear the filters.', [clearAction]));
+      } else {
+        missingGrid.appendChild(buildEmptyState('fa-crown',
+          currentStudentUser ? 'Nothing left to unlock' : 'No premium courses yet',
+          currentStudentUser ? 'You already have every premium course that is currently available.' : 'Premium courses will appear here when they are published.', []));
+      }
     } else {
       missingGrid.appendChild(fragMissing);
     }
   }
 }
 
-// Render Course Card Element
+// Render Course Card Element (buttons use listeners instead of inline JavaScript; names are escaped)
 function renderCard(subject, container, cardType) {
-  const card = document.createElement('div');
+  const card = document.createElement('article');
   card.className = 'course-card';
 
-  const tagSem = subject.semester ? ` • ${subject.semester} Sem` : '';
+  const tagSem = subject.semester ? ` • ${escapeHtml(subject.semester)} Sem` : '';
   const priceNpr = Number(subject.price_npr || 0);
 
   let badgeHTML = '';
   let buttonHTML = '';
+  let onActivate = null;
 
   if (cardType === 'enrolled') {
     badgeHTML = '<span class="badge enrolled">Enrolled</span>';
-    buttonHTML = `<button class="btn-card-action" onclick="openCourseViewer(currentStudentUser, '${subject.id}')"><i class="fa-solid fa-book-open"></i> Read Notes</button>`;
+    buttonHTML = '<button type="button" class="btn-card-action"><i class="fa-solid fa-book-open" aria-hidden="true"></i> Read Notes</button>';
+    onActivate = () => openCourseViewer(currentStudentUser, subject.id);
   } else if (cardType === 'free') {
     badgeHTML = '<span class="badge free">Free Book</span>';
-    buttonHTML = `<button class="btn-card-action free" onclick="openCourseViewer(currentStudentUser, '${subject.id}')"><i class="fa-solid fa-eye"></i> View Material</button>`;
+    buttonHTML = '<button type="button" class="btn-card-action free"><i class="fa-solid fa-eye" aria-hidden="true"></i> View Material</button>';
+    onActivate = () => openCourseViewer(currentStudentUser, subject.id);
   } else if (cardType === 'guest_free') {
     badgeHTML = '<span class="badge free">Free Book</span>';
-    buttonHTML = `<button class="btn-card-action free" onclick="openAuthModal('login')"><i class="fa-solid fa-right-to-bracket"></i> Login to Read</button>`;
+    buttonHTML = '<button type="button" class="btn-card-action free"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i> Login to Read</button>';
+    onActivate = () => openAuthModal('login');
   } else if (cardType === 'missing') {
     badgeHTML = `<span class="badge price">NPR ${priceNpr}</span>`;
-    buttonHTML = `<button class="btn-card-action pay" onclick="openPaymentModal('${subject.id}')"><i class="fa-solid fa-qrcode"></i> Buy / Enroll</button>`;
+    buttonHTML = '<button type="button" class="btn-card-action pay"><i class="fa-solid fa-qrcode" aria-hidden="true"></i> Buy / Enroll</button>';
+    onActivate = () => openPaymentModal(subject.id);
   } else if (cardType === 'guest_premium') {
     badgeHTML = `<span class="badge price">NPR ${priceNpr}</span>`;
-    buttonHTML = `<button class="btn-card-action pay" onclick="openAuthModal('login')"><i class="fa-solid fa-lock"></i> Login to Unlock</button>`;
+    buttonHTML = '<button type="button" class="btn-card-action pay"><i class="fa-solid fa-lock" aria-hidden="true"></i> Login to Unlock</button>';
+    onActivate = () => openAuthModal('login');
   }
 
   card.innerHTML = `
     <div>
       <div class="course-header-row">
-        <div class="course-title">${subject.subject_name}</div>
+        <h3 class="course-title">${escapeHtml(subject.subject_name)}</h3>
         ${badgeHTML}
       </div>
       <div class="course-meta">
-        <i class="fa-regular fa-file-pdf accent-text"></i>
+        <i class="fa-regular fa-file-pdf" aria-hidden="true"></i>
         <span>${subject.total_pages || 0} Pages${tagSem}</span>
       </div>
     </div>
@@ -573,6 +643,9 @@ function renderCard(subject, container, cardType) {
       ${buttonHTML}
     </div>
   `;
+
+  const btn = card.querySelector('button');
+  if (btn && onActivate) btn.addEventListener('click', onActivate);
 
   container.appendChild(card);
 }

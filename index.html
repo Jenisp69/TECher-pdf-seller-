@@ -3,11 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>ThinkAhead Student Portal</title>
-  <link rel="stylesheet" href="style.css">
-  <link rel="stylesheet" href="profile.css">
-  <link rel="stylesheet" href="auth.css">
-  <link rel="stylesheet" href="quiz.css">
+  <title>ThinkAhead Academy | Study Notes &amp; Free Books for Students in Nepal</title>
+  <meta name="description" content="ThinkAhead is a non-profit learning portal in Nepal with free reference books and well-structured class notes for engineering and academic students. Every purchase helps fund education for underprivileged children.">
+  <link rel="canonical" href="https://thinkaheadacademy.vercel.app/">
+  <meta name="theme-color" content="#00304F">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ThinkAhead Academy">
+  <meta property="og:title" content="ThinkAhead Academy | Study Notes &amp; Free Books for Students in Nepal">
+  <meta property="og:description" content="Free reference books and class notes for students in Nepal. Every purchase helps fund education for underprivileged children.">
+  <meta property="og:url" content="https://thinkaheadacademy.vercel.app/">
+  <meta property="og:image" content="https://thinkaheadacademy.vercel.app/resources/thinkaheadlogo.jpeg">
+  <meta property="og:image:alt" content="ThinkAhead Academy logo: an open book beside a head with an upward arrow">
+  <meta name="twitter:card" content="summary">
+  <link rel="icon" type="image/jpeg" href="resources/thinkahead-logo-96.jpg">
+  <link rel="apple-touch-icon" href="resources/thinkahead-logo-192.jpg">
+  <script type="application/ld+json">
+  {"@context":"https://schema.org","@type":"EducationalOrganization","name":"ThinkAhead Academy","url":"https://thinkaheadacademy.vercel.app/","logo":"https://thinkaheadacademy.vercel.app/resources/thinkaheadlogo.jpeg","description":"A learning portal in Nepal offering free reference books and class notes for engineering and academic students. Proceeds from sales fund the education of underprivileged children.","areaServed":"NP","sameAs":["https://www.youtube.com/@ThinkAheadAcademy01","https://www.instagram.com/thinkaheadacademy01"]}
+  </script>
+  <link rel="stylesheet" href="style.css?v=20261107">
+  <link rel="stylesheet" href="profile.css?v=20261107">
+  <link rel="stylesheet" href="auth.css?v=20261107">
+  <link rel="stylesheet" href="quiz.css?v=20261107">
+  <link rel="stylesheet" href="shell.css?v=20261107">
 
 
   <script>
@@ -22,37 +39,65 @@
 </script>
 
   
+  <script>
+  (function () {
+    try {
+      if (sessionStorage.getItem('student_user') || sessionStorage.getItem('google_login_pending')) {
+        document.documentElement.classList.add('is-student');
+      }
+    } catch (e) {}
+  })();
+  </script>
+
   <!-- Font Awesome & Libraries -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 </head>
-<body>
-
-  <!-- BACKGROUND GLASS EFFECTS -->
-  <div class="blob blob-1"></div>
-  <div class="blob blob-2"></div>
+<body data-screen="home" data-view="courses">
+  <script>
+  (function () {
+    try {
+      var v = new URLSearchParams(location.search).get('view');
+      if (['courses', 'free', 'premium', 'about'].indexOf(v) > -1) document.body.setAttribute('data-view', v);
+    } catch (e) {}
+  })();
+  </script>
+  <a class="skip-link" href="#homepage-section">Skip to main content</a>
+  <div id="nav-live" class="visually-hidden" role="status" aria-live="polite"></div>
 
   <!-- ==========================================
        01. Top Navigation Bar
        ========================================== -->
-  <header class="glass-navbar">
+  <header class="glass-navbar app-bar" id="app-bar">
     <div class="nav-container">
-      <div class="brand-logo-title" onclick="window.location.reload()">
-        <img src="resources/thinkaheadlogo.jpeg" alt="ThinkAhead Logo" class="app-logo-sm" onerror="this.style.display='none'">
+      <button type="button" id="nav-menu-btn" class="app-icon-btn nav-menu-btn" aria-label="Open menu" aria-expanded="false" aria-controls="nav-drawer">
+        <i class="fa-solid fa-bars" aria-hidden="true"></i>
+      </button>
+
+      <a class="brand-logo-title" href="./" aria-label="ThinkAhead Academy home">
+        <img src="resources/thinkahead-logo-96.jpg" alt="ThinkAhead Academy logo" class="app-logo-sm" width="36" height="36" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='resources/thinkaheadlogo.jpeg';}else{this.style.display='none';}">
         <span class="brand-text">Think<span class="accent-text">Ahead</span></span>
-      </div>
+      </a>
+
+      <nav class="desktop-nav" aria-label="Main">
+        <a class="dnav-link student-only" href="#enrolled-section" data-nav="courses"><i class="fa-solid fa-book-open" aria-hidden="true"></i> My Courses <span class="nav-badge" data-badge="courses" hidden></span></a>
+        <a class="dnav-link" href="#free-books-section" data-nav="free"><i class="fa-solid fa-gift" aria-hidden="true"></i> Free Books</a>
+        <a class="dnav-link" href="#missing-section" data-nav="premium"><i class="fa-solid fa-crown" aria-hidden="true"></i> Premium</a>
+        <a class="dnav-link student-only" href="#quiz-entry-section" data-nav="quiz"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Quiz <span class="nav-badge" data-badge="quiz" hidden></span></a>
+        <a class="dnav-link" href="#bottom-mission-section" data-nav="about"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i> About</a>
+      </nav>
 
       <div class="nav-actions">
-<button id="theme-toggle-btn" class="theme-toggle-btn" type="button" title="Switch theme" aria-label="Switch theme">
-  <i class="fa-solid fa-sun"></i>
-</button>
+        <button id="theme-toggle-btn" class="theme-toggle-btn" type="button" title="Switch theme" aria-label="Switch theme">
+          <i class="fa-solid fa-sun"></i>
+        </button>
 
         <!-- Guest State -->
         <button id="nav-login-btn" class="btn-glass-accent" onclick="openAuthModal('login')">
-          <i class="fa-solid fa-right-to-bracket"></i>
-          <span>Login / Register</span>
+          <i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i>
+          <span class="lbl-long">Login / Register</span><span class="lbl-short">Login</span>
         </button>
 
         <!-- Logged-In State: profile button (opens the profile drawer; the logout button lives inside it) -->
@@ -67,13 +112,38 @@
     </div>
   </header>
 
+  <!-- Left menu drawer (phones). The same destinations as the tab bar plus the secondary pages. -->
+  <div id="nav-overlay" class="nav-overlay" hidden></div>
+  <aside id="nav-drawer" class="nav-drawer" role="dialog" aria-modal="true" aria-label="Menu" aria-hidden="true" tabindex="-1" hidden>
+    <div class="nav-drawer-head">
+      <img src="resources/thinkahead-logo-96.jpg" alt="" width="36" height="36" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src='resources/thinkaheadlogo.jpeg';}else{this.style.display='none';}">
+      <span class="brand-text">Think<span class="accent-text">Ahead</span></span>
+      <button type="button" class="app-icon-btn nav-close" aria-label="Close menu"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>
+    </div>
+    <nav class="nav-scroll" aria-label="Menu">
+      <p class="nav-group-label">Study</p>
+      <a class="nav-link student-only" href="#enrolled-section" data-nav="courses"><i class="fa-solid fa-book-open" aria-hidden="true"></i> My Courses <span class="nav-badge" data-badge="courses" hidden></span></a>
+      <a class="nav-link" href="#free-books-section" data-nav="free"><i class="fa-solid fa-gift" aria-hidden="true"></i> Free Books</a>
+      <a class="nav-link" href="#missing-section" data-nav="premium"><i class="fa-solid fa-crown" aria-hidden="true"></i> Premium Courses</a>
+      <a class="nav-link student-only" href="#quiz-entry-section" data-nav="quiz"><i class="fa-solid fa-circle-question" aria-hidden="true"></i> Quiz <span class="nav-badge" data-badge="quiz" hidden></span></a>
+      <p class="nav-group-label">More</p>
+      <a class="nav-link" href="#bottom-mission-section" data-nav="about"><i class="fa-solid fa-hand-holding-heart" aria-hidden="true"></i> About ThinkAhead</a>
+      <a class="nav-link" href="#feedback-section" data-nav="about" data-scroll="feedback-section"><i class="fa-regular fa-star" aria-hidden="true"></i> Give feedback</a>
+      <a class="nav-link" href="#teacher-section" data-nav="about" data-scroll="teacher-section"><i class="fa-solid fa-chalkboard-user" aria-hidden="true"></i> Contact the teacher</a>
+      <a class="nav-link" href="privacy.html"><i class="fa-solid fa-shield-halved" aria-hidden="true"></i> Privacy policy</a>
+    </nav>
+    <div class="nav-drawer-foot guest-only">
+      <button type="button" class="btn-primary-glass" data-action="login"><i class="fa-solid fa-right-to-bracket" aria-hidden="true"></i> Login / Register</button>
+    </div>
+  </aside>
+
   <!-- ==========================================
        02. Main Portal Content
        ========================================== -->
-  <main id="homepage-section" class="main-content container">
+  <main id="homepage-section" class="main-content container" tabindex="-1">
     
     <!-- Hero Banner with Mission Preview -->
-    <section class="hero-card glass-card">
+    <section class="hero-card glass-card" data-vs="courses" aria-labelledby="hero-title">
       <div class="hero-body">
         <span class="glass-badge" id="hero-badge"><i class="fa-solid fa-heart"></i> Non-Profit Learning Portal</span>
         <h1 id="hero-title">Master Your Engineering & Academic Studies</h1>
@@ -105,39 +175,8 @@
       </div>
     </section>
 
-    <!-- Catalog Filter Bar -->
-    <section id="catalog-filter-bar" class="section-container">
-      <div class="glass-card filter-card">
-        <div class="filter-header">
-          <h3><i class="fa-solid fa-filter accent-text"></i> Filter Course Catalog</h3>
-        </div>
-
-        <!-- Level 1: Stream / Faculty Pills -->
-        <div id="filter-stream-group" class="filter-group">
-          <label>Faculty / Stream:</label>
-          <div id="filter-stream-pills" class="pill-group"></div>
-        </div>
-
-        <!-- Level 2: Semester Pills -->
-        <div id="filter-semester-group" class="filter-group hidden">
-          <label>Semester:</label>
-          <div id="filter-semester-pills" class="pill-group"></div>
-        </div>
-      </div>
-    </section> 
-
-    
-    <!-- Enrolled Courses Section -->
-<section id="enrolled-section" class="section-container hidden">
-  <div class="section-header section-header-enrolled">
-    <h2><i class="fa-solid fa-circle-check"></i> My Enrolled Courses</h2>
-    <span class="section-subtitle">Your active unlocked study subjects and resources</span>
-  </div>
-  <div id="enrolled-courses-list" class="course-grid"></div>
-</section>
-
-<!-- Quiz entry card (shown only when a student is logged in; behaviour in quiz.js) -->
-<section id="quiz-entry-section" class="section-container hidden">
+    <!-- Quiz entry card (shown only when a student is logged in; behaviour in quiz.js) -->
+<section id="quiz-entry-section" class="section-container hidden" data-vs="courses free" aria-label="Quiz Challenge">
   <div class="glass-card qz-entry">
     <div class="qz-entry-text">
       <h2><i class="fa-solid fa-circle-question"></i> Quiz Challenge</h2>
@@ -150,8 +189,46 @@
   </div>
 </section>
 
+    <!-- Catalog filter (rows are built by filter.js from the database; empty rows stay hidden) -->
+    <section id="catalog-filter-bar" class="section-container" data-vs="courses free premium" aria-label="Filter courses">
+      <div class="filter-bar" id="filter-bar" role="group" aria-label="Filter by level, stream and semester">
+        <button type="button" class="filter-toggle" id="filter-toggle" aria-expanded="false" aria-controls="filter-rows">
+          <i class="fa-solid fa-sliders" aria-hidden="true"></i>
+          <span>Filter</span>
+          <span class="ft-summary" id="filter-summary">All resources</span>
+          <span class="ft-count" id="filter-count" hidden>0</span>
+          <i class="fa-solid fa-chevron-down ft-caret" aria-hidden="true"></i>
+        </button>
+        <div id="filter-rows" class="filter-rows">
+        <div id="filter-level-group" class="filter-row" hidden>
+          <span class="filter-label">Level</span>
+          <div id="filter-level-pills" class="pill-group"></div>
+        </div>
+        <div id="filter-stream-group" class="filter-row" hidden>
+          <span class="filter-label">Stream</span>
+          <div id="filter-stream-pills" class="pill-group"></div>
+        </div>
+        <div id="filter-semester-group" class="filter-row" hidden>
+          <span class="filter-label">Semester</span>
+          <div id="filter-semester-pills" class="pill-group"></div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    
+    
+    <!-- Enrolled Courses Section -->
+<section id="enrolled-section" class="section-container hidden" data-vs="courses">
+  <div class="section-header section-header-enrolled">
+    <h2><i class="fa-solid fa-circle-check"></i> My Enrolled Courses</h2>
+    <span class="section-subtitle">Your active unlocked study subjects and resources</span>
+  </div>
+  <div id="enrolled-courses-list" class="course-grid"></div>
+</section>
+
 <!-- Free Books Section -->
-<section id="free-books-section" class="section-container">
+<section id="free-books-section" class="section-container" data-vs="free">
   <div class="section-header section-header-free">
     <h2><i class="fa-solid fa-gift"></i> Free Books & Open Material</h2>
     <span class="section-subtitle">Open-access reference books and general notes</span>
@@ -160,7 +237,7 @@
 </section>
 
 <!-- Premium Courses Section -->
-<section id="missing-section" class="section-container">
+<section id="missing-section" class="section-container" data-vs="premium">
   <div class="section-header section-header-premium">
     <h2><i class="fa-solid fa-crown"></i> Premium Courses Catalog</h2>
     <span class="section-subtitle">Expand your learning setup — contact teacher to unlock these courses</span>
@@ -169,13 +246,13 @@
 </section>
 
     <!-- Dynamic Mission Section -->
-    <section id="bottom-mission-section" class="section-container">
+    <section id="bottom-mission-section" class="section-container" data-vs="about" aria-labelledby="mission-heading">
       <div class="glass-card mission-card">
         <div class="tab-header">
-          <h3><i class="fa-solid fa-hand-holding-heart accent-text"></i> Our Purpose & Mission</h3>
+          <h2 id="mission-heading"><i class="fa-solid fa-hand-holding-heart accent-text" aria-hidden="true"></i> Our Purpose &amp; Mission</h2>
           <div class="lang-tabs">
             <button class="pill-btn active" id="tab-btn-en" onclick="switchMissionLang('en')">English</button>
-            <button class="pill-btn" id="tab-btn-ne" onclick="switchMissionLang('ne')">नेपाली</button>
+            <button class="pill-btn" id="tab-btn-ne" onclick="switchMissionLang('ne')" lang="ne">नेपाली</button>
           </div>
         </div>
 
@@ -186,7 +263,7 @@
 
           <div class="mission-divider"></div>
 
-          <div id="mission-content-ne" class="mission-tab-content hidden">
+          <div id="mission-content-ne" class="mission-tab-content hidden" lang="ne">
             <p>हाम्रो गैर-नाफामूलक (non-profit) सिकाइ पोर्टलमा यहाँहरूलाई स्वागत छ, जहाँ तपाईँले प्रयोग गर्ने प्रत्येक अध्ययन सामग्रीले एउटा बच्चाको भविष्य निर्माण गर्न मद्दत गर्दछ। हाम्रो मुख्य उद्देश्य विद्यार्थीहरूलाई उनीहरूको पढाइमा उत्कृष्ट बनाउनका लागि उच्च गुणस्तरीय, व्यवस्थित नोट्स र नि:शुल्क सन्दर्भ पुस्तकहरू उपलब्ध गराउनु हो। यद्यपि, यो प्लेटफर्म केवल नोट्स सेयर गर्नका लागि मात्र नभई योभन्दा धेरै ठूलो उद्देश्यका साथ निर्माण गरिएको हो। यस वेबसाइटमा हुने बिक्रीबाट प्राप्त हुने १००% रकम प्रत्यक्ष रूपमा विपन्न तथा असहाय बालबालिकाको शिक्षाका लागि समर्पित गरिन्छ। धेरै होसियार र तीक्ष्ण दिमाग भएका बालबालिकाहरू पनि केवल आफ्नो परिवारले ट्युसन शुल्क, पोसाक वा आधारभूत कापी-कलम खरिद गर्न नसकेका कारण विद्यालय छाड्न वा पढाइबाट बञ्चित हुन बाध्य छन्। हाम्रा नोट्सहरू खरिद गरेर वा यहाँका सामग्रीहरू प्रयोग गरेर तपाईँले केवल आफ्नो परीक्षाको लागि मात्र पढिरहनुभएको छैन—तपाईँले सोझै एउटा अभावमा परेको बच्चाको पढ्ने सपनालाई साकार पार्न सहयोग गरिरहनुभएको छ। शिक्षाको शक्तिमार्फत गरिबीको चक्रलाई तोड्दै, हामी सबै मिलेर तपाईँले पढ्ने प्रत्येक पानालाई कसैको लागि आशाको किरणमा बदल्न सक्छौँ।</p>
           </div>
         </div>
@@ -194,7 +271,7 @@
     </section>
 
     <!-- Student Feedback Section -->
-    <section class="section-container" id="feedback-section">
+    <section class="section-container" id="feedback-section" data-vs="about">
       <div class="glass-card feedback-card">
         <div class="section-header">
           <h2><i class="fa-solid fa-star accent-text"></i> Student Feedback & Reviews</h2>
@@ -204,12 +281,12 @@
         <form id="feedback-form" class="feedback-form">
           <div class="star-rating-picker">
             <span class="rating-label">Your Rating:</span>
-            <div class="star-group">
-              <i class="fa-solid fa-star star-btn active" data-value="1"></i>
-              <i class="fa-solid fa-star star-btn active" data-value="2"></i>
-              <i class="fa-solid fa-star star-btn active" data-value="3"></i>
-              <i class="fa-solid fa-star star-btn active" data-value="4"></i>
-              <i class="fa-solid fa-star star-btn active" data-value="5"></i>
+            <div class="star-group" role="group" aria-label="Your rating">
+              <button type="button" class="star-btn active" data-value="1" aria-label="1 star" aria-pressed="false"><i class="fa-solid fa-star" aria-hidden="true"></i></button>
+              <button type="button" class="star-btn active" data-value="2" aria-label="2 stars" aria-pressed="false"><i class="fa-solid fa-star" aria-hidden="true"></i></button>
+              <button type="button" class="star-btn active" data-value="3" aria-label="3 stars" aria-pressed="false"><i class="fa-solid fa-star" aria-hidden="true"></i></button>
+              <button type="button" class="star-btn active" data-value="4" aria-label="4 stars" aria-pressed="false"><i class="fa-solid fa-star" aria-hidden="true"></i></button>
+              <button type="button" class="star-btn active" data-value="5" aria-label="5 stars" aria-pressed="true"><i class="fa-solid fa-star" aria-hidden="true"></i></button>
             </div>
           </div>
 
@@ -226,28 +303,28 @@
     </section>
 
     <!-- Teacher Contact & Socials -->
-    <section class="section-container">
+    <section class="section-container" id="teacher-section" data-vs="about">
       <div class="glass-card teacher-socials-card">
-        <h3><i class="fa-solid fa-chalkboard-user accent-text"></i> Connect with Teacher</h3>
+        <h2><i class="fa-solid fa-chalkboard-user accent-text" aria-hidden="true"></i> Connect with Teacher</h2>
         <p>Have questions regarding enrollment, purchasing courses, or free materials? Reach out directly:</p>
         
         <div class="social-links-grid">
-  <a href="https://www.youtube.com/@ThinkAheadAcademy01" target="_blank" class="social-btn youtube">
+  <a href="https://www.youtube.com/@ThinkAheadAcademy01" target="_blank" rel="noopener" class="social-btn youtube">
     <i class="fa-brands fa-youtube"></i>
     <span>YouTube Channel</span>
   </a>
 
-  <a href="https://www.facebook.com/share/1DgDELymMB/" target="_blank" class="social-btn facebook">
+  <a href="https://www.facebook.com/share/1DgDELymMB/" target="_blank" rel="noopener" class="social-btn facebook">
     <i class="fa-brands fa-facebook-f"></i>
     <span>Facebook Page</span>
   </a>
 
-  <a href="https://www.instagram.com/thinkaheadacademy01?obrf=bGJ2YXZyajZuYzRr" target="_blank" class="social-btn instagram">
+  <a href="https://www.instagram.com/thinkaheadacademy01?obrf=bGJ2YXZyajZuYzRr" target="_blank" rel="noopener" class="social-btn instagram">
     <i class="fa-brands fa-instagram"></i>
     <span>Instagram Profile</span>
   </a>
 
-  <a href="https://wa.me/9779826109280" target="_blank" class="social-btn whatsapp">
+  <a href="https://wa.me/9779826109280" target="_blank" rel="noopener" class="social-btn whatsapp">
     <i class="fa-brands fa-whatsapp"></i>
     <span>Direct WhatsApp</span>
   </a>
@@ -257,6 +334,25 @@
 
   </main>
 
+  <footer class="site-footer" role="contentinfo">
+    <div class="site-footer-inner">
+      <span>&copy; ThinkAhead Academy. A non-profit learning portal for students in Nepal.</span>
+      <nav aria-label="Footer">
+        <a href="privacy.html">Privacy policy</a>
+        <a href="https://wa.me/9779826109280" target="_blank" rel="noopener">Contact on WhatsApp</a>
+        <a href="https://www.youtube.com/@ThinkAheadAcademy01" target="_blank" rel="noopener">YouTube</a>
+      </nav>
+    </div>
+  </footer>
+
+  <!-- Bottom tab bar: students on phones, dashboard only (hidden while reading or doing the quiz) -->
+  <nav class="tabbar student-only" id="tabbar" aria-label="Main sections">
+    <a class="tab-item" href="#enrolled-section" data-nav="courses"><i class="fa-solid fa-book-open" aria-hidden="true"></i><span>My Courses</span><b class="tab-badge" data-badge="courses" hidden></b></a>
+    <a class="tab-item" href="#free-books-section" data-nav="free"><i class="fa-solid fa-gift" aria-hidden="true"></i><span>Free</span></a>
+    <a class="tab-item" href="#missing-section" data-nav="premium"><i class="fa-solid fa-crown" aria-hidden="true"></i><span>Premium</span></a>
+    <a class="tab-item" href="#quiz-entry-section" data-nav="quiz"><i class="fa-solid fa-circle-question" aria-hidden="true"></i><span>Quiz</span><b class="tab-badge" data-badge="quiz" hidden></b></a>
+  </nav>
+
   <!-- ==========================================
        03. Modals & Overlays
        ========================================== -->
@@ -265,6 +361,7 @@
        ========================================== -->
   <div id="pf-overlay" class="pf-overlay" hidden></div>
   <aside id="pf-drawer" class="pf-drawer" role="dialog" aria-modal="true" aria-labelledby="pf-title" aria-hidden="true" tabindex="-1" hidden>
+    <div class="pf-grabber" id="pf-grabber" aria-hidden="true"><span></span></div>
     <div class="pf-scroll">
 
       <header class="pf-hero">
@@ -556,7 +653,7 @@
       <button class="modal-close-btn" onclick="closePaymentModal()">&times;</button>
       
       <div class="brand-header">
-        <img src="resources/thinkaheadlogo.jpeg" alt="ThinkAhead Logo" class="app-logo" onerror="this.style.display='none'">
+        <img src="resources/thinkaheadlogo.jpeg" alt="ThinkAhead Academy logo" class="app-logo" onerror="this.style.display='none'">
         <h2 id="pay-subject-title" class="app-title">Course Purchase</h2>
         <p class="app-subtitle">Scan the QR code below to complete payment</p>
       </div>
@@ -583,7 +680,7 @@
   </div>
 
   <!-- Quiz screen (opened from the Quiz Challenge card; behaviour in quiz.js) -->
-  <div id="quiz-section" class="hidden">
+  <div id="quiz-section" class="hidden" role="region" aria-label="Quiz">
     <nav class="qz-nav">
       <button type="button" id="quiz-back-btn" class="btn-sm" aria-label="Back to portal">
         <i class="fa-solid fa-arrow-left"></i>
@@ -603,7 +700,7 @@
   </div>
 
   <!-- Canvas PDF Reader Section -->
-  <div id="reader-section" class="hidden">
+  <div id="reader-section" class="hidden" role="region" aria-label="Book reader">
     <nav class="reader-nav">
       <button id="back-to-dash-btn" class="btn-sm">
         <i class="fa-solid fa-arrow-left"></i>
@@ -645,15 +742,16 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
-<script src="pdf-viewer.js"></script>
-  <script src="filter.js"></script>
-  <script src="auth.js"></script>
-  <script src="auth-motion.js"></script>
+  <script src="config.js?v=20261107"></script>
+<script src="pdf-viewer.js?v=20261107"></script>
+  <script src="filter.js?v=20261107"></script>
+  <script src="auth.js?v=20261107"></script>
+  <script src="auth-motion.js?v=20261107"></script>
   
-  <script src="feedback.js"></script>
-  <script src="profile.js"></script>
-  <script src="quiz.js"></script>
+  <script src="feedback.js?v=20261107"></script>
+  <script src="profile.js?v=20261107"></script>
+  <script src="quiz.js?v=20261107"></script>
+  <script src="nav.js?v=20261107"></script>
 
   <script>
   (function () {

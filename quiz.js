@@ -99,6 +99,12 @@
         ? 'No questions yet. Check back soon.'
         : (open > 0 ? open + ' question' + (open === 1 ? '' : 's') + ' waiting for you.' : 'You have answered every question. Great job!');
     }
+    // lets the navigation show an "unanswered" badge on the Quiz item (display only)
+    try {
+      window.dispatchEvent(new CustomEvent('quiz:summary', {
+        detail: { loaded: state.loaded, total: state.total, open: state.questions.filter((q) => !q.answer).length }
+      }));
+    } catch (e) { /* the badge is a bonus; never block the quiz */ }
   }
 
   function renderTabs() {

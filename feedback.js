@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
       stars.forEach(s => {
         const val = parseInt(s.getAttribute('data-value'), 10);
         s.classList.toggle('active', val <= selectedRating);
+        s.setAttribute('aria-pressed', val === selectedRating ? 'true' : 'false');
       });
     });
   });
@@ -51,7 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Reset stars back to 5
         selectedRating = 5;
-        stars.forEach(s => s.classList.add('active'));
+        stars.forEach(s => {
+          s.classList.add('active');
+          s.setAttribute('aria-pressed', s.getAttribute('data-value') === '5' ? 'true' : 'false');
+        });
 
       } catch (err) {
         console.error('Feedback submission error:', err);
